@@ -1,0 +1,195 @@
+<?php
+// $Id: extractor.module,v 1.8 2010/09/21 01:43:12 alexb Exp $
+
+/**
+ * @file
+ * Main API functions.
+ *
+ * Variables:
+ *
+ * Name: extractor_engine
+ */
+
+/**
+ * Implementation of hook_plugins().
+ */
+function extractor_feeds_plugins() {
+  $info['ExtractorSyndicationParser'] = array(
+    'name' => 'Common syndication parser with term extraction',
+    'description' => 'Parse XML feeds in RSS 1, RSS 2 or Atom format, extract terms from titles and descriptions.',
+    'handler' => array(
+      'parent' => 'FeedsSyndicationParser',
+      'class' => 'ExtractorSyndicationParser',
+      'file' => 'ExtractorSyndicationParser.inc',
+      'path' => drupal_get_path('module', 'extractor'),
+    ),
+  );
+  if (feeds_library_exists('simplepie.inc', 'simplepie')) {
+    $info['ExtractorSimplePieParser'] = array(
+      'name' => 'SimplePie parser with term extraction',
+      'description' => 'Use <a href="http://simplepie.org/">SimplePie</a> to parse XML feeds in RSS 1, RSS 2 or Atom format, extract terms from titles and descriptions.',
+      'handler' => array(
+        'parent' => 'FeedsSimplePieParser',
+        'class' => 'ExtractorSimplePieParser',
+        'file' => 'ExtractorSimplePieParser.inc',
+        'path' => drupal_get_path('module', 'extractor'),
+      ),
+    );
+  }
+  $info['ExtractorTermProcessor'] = array(
+    'name' => 'Extractor Term Processor',
+    'description' => 'Marks every imported term for use as extraction term.',
+    'handler' => array(
+      'parent' => 'FeedsTermProcessor',
+      'class' => 'ExtractorTermProcessor',
+      'file' => 'ExtractorTermProcessor.inc',
+      'path' => drupal_get_path('module', 'extractor'),
+    ),
+  );
+  return $info;
+}
+
+/**
+ * Implementation of hook_form_taxonomy_form_vocabulary_alter().
+ */
+function extractor_form_taxonomy_form_vocabulary_alter(&$form, &$form_state) {
+  $form['extractor'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Term extraction'),
+    '#collapsible' => TRUE,
+  );
+  $lookup = FALSE;
+  $vocabularies = variable_get('extractor_simple_vocabularies', array());
+  if ($vocabularies[$form['vid']['#value']] || $vocabularies[$form['module']['#value']]) {
+    $lookup = TRUE;
+  }
+  $form['extractor']['extractor_lookup'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use all terms of this vocabulary for extraction'),
+    '#description' => t('If checked new posts containing terms of this vocabulary will be automatically tagged with them. You can alternatively pick single terms for extraction on term forms.'),
+    '#default_value' => $lookup,
+  );
+  $form['#submit'][] = 'extractor_form_vocabulary_submit';
+}
+
+/**
+ * Submit handler for extractor_form_taxonomy_form_vocabulary_alter().
+ */
+function extractor_form_vocabulary_submit($form, &$form_state) {
+  $vocabularies = variable_get('extractor_simple_vocabularies', array());
+  unset($vocabularies[$form_state['values']['module']], $vocabularies[$form_state['values']['vid']]);
+
+  if (!empty($form_state['values']['extractor_lookup'])) {
+    $id = strpos($form_state['values']['module'], 'features_') === 0 ? $form_state['values']['module'] : $form_state['values']['vid'];
+    $vocabularies[$id] = TRUE;
+  }
+  variable_set('extractor_simple_vocabularies', $vocabularies);
+}
+
+/**
+ * Implementation of specific hook_form_alter().
+ */
+function extractor_form_taxonomy_form_term_alter(&$form, &$form_state) {
+  $form['submit']['#weight'] = isset($form['submit']['#weight']) ? $form['submit']['#weight'] + 1 : 1;
+  $form['delete']['#weight'] = isset($form['delete']['#weight']) ? $form['submit']['#weight'] + 1 : 1;
+  $form['extractor'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Term extraction'),
+    '#collapsible' => TRUE,
+  );
+
+  if (extractor_use_vocabulary($form['vid']['#value'])) {
+    $description = t('All terms of this vocabulary are used for term extraction. You can change this setting on the vocabulary form.');
+    $default = $disabled = TRUE;
+  }
+  else {
+    $description = t('If checked new posts containing this term will be automatically tagged with it.');
+    $default = isset($form['tid']['#value']) ? extractor_use_term($form['tid']['#value']) : 0;
+    $disabled = FALSE;
+  }
+  $form['extractor']['extractor_lookup'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use for term extraction'),
+    '#description' => $description,
+    '#default_value' => $default,
+    '#disabled' => $disabled,
+  );
+}
+
+/**
+ * Implementation of hook_taxonomy().
+ */
+function extractor_taxonomy($op = NULL, $type = NULL, $term = NULL){
+  if ($type =='term' && $term) {
+    switch ($op) {
+      case 'delete':
+        db_query("DELETE FROM {extractor_lookup} WHERE tid = %d", $term['tid']);
+        break;
+      case 'update':
+        db_query("DELETE FROM {extractor_lookup} WHERE tid = %d", $term['tid']);
+      case 'insert':
+        if (!empty($term['extractor_lookup'])) {
+          drupal_write_record('extractor_lookup', $term);
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_feeds_term_processor_targets_alter().
+ */
+function extractor_feeds_term_processor_targets_alter(&$targets, $vid) {
+  $targets['extractor_lookup'] = array(
+    'name' => t('Use for term extraction'),
+    'description' => t('Boolean value determining whether a term is used for term extraction or not.'),
+  );
+}
+
+/**
+ * Determine whether a term should be used for term extraction or not.
+ */
+function extractor_use_term($tid) {
+  return db_result(db_query("SELECT tid FROM {extractor_lookup} WHERE tid = %d", $tid));
+}
+
+/**
+ * Determine whether a term should be used for term extraction or not.
+ */
+function extractor_use_vocabulary($vid) {
+  $vocabulary = taxonomy_vocabulary_load($vid);
+  $vocabularies = variable_get('extractor_simple_vocabularies', array());
+  return (isset($vocabularies[$vocabulary->vid]) || isset($vocabularies[$vocabulary->module]));
+}
+
+/**
+ * Main API function.
+ *
+ * @param $text
+ *   The text to perform the term extraction on.
+ * @param $library
+ *   The extraction library to use. Possible options: 'extractor_simple' or
+ *   'placemaker'.
+ * @param $config
+ *   An array containing a configuration for the library in use.
+ *
+ * @return
+ *   An array of terms found in $text. They keys of the array contain the
+ *   taxonomy term ids and the values the term names.
+ */
+function extractor_extract($text, $library = 'extractor_simple', $config = array()) {
+  extractor_include($library);
+  $extract = "{$library}_extract";
+  return $extract($text, $config);
+}
+
+/**
+ * Include from libraries.
+ */
+function extractor_include($name) {
+  static $included;
+  if (!$included[$name]) {
+    include drupal_get_path('module', 'extractor') .'/libraries/'. $name .'.inc';
+    $included[$name] = TRUE;
+  }
+}

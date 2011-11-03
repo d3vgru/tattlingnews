@@ -1,0 +1,7 @@
+; $Id$
+
+name = "Image Extractor"
+description = "Extracts External Images in Nodes and downloads them locally so that they can be processed by imagecache."
+package = "Other"
+core = 6.x
+php = 5.1

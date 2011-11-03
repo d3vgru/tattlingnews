@@ -1,0 +1,27 @@
+<?php
+
+// $Id: feedapi_dedupe.install,v 1.1 2009/10/13 19:25:36 inadarei Exp $
+
+/**
+ * @file
+ * Install file for FeedAPI Total de-Dupe module.
+ */
+
+
+/**
+* hook_install implementation
+*/ 
+function feedapi_dedupe_install() {
+
+  // Module weights: put deduper high up.
+  db_query("UPDATE {system} SET weight = 10 WHERE name = 'feedapi_dedupe'");
+
+}
+
+
+/**
+* hook_uninstall implementation
+*/ 
+function feedapi_dedupe_uninstall() {
+}
+

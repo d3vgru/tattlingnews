@@ -1,0 +1,11 @@
+
+.feedapi-stat.number,
+.feedapi-stat.interval,
+.feedapi-stat.date,
+.feedapi-stat.na {
+  display: block;
+  text-align: right;
+}
+.feedapi-stat-wrapper .sparkline {
+  float: right;
+}

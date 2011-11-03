@@ -1,0 +1,33 @@
+; $Id: rootcandy_fixed.info,v 1.1.2.1 2008/10/11 10:28:44 sign Exp $
+name = RootCandy Fixed
+description = Administration theme - fixed width
+screenshot = screenshot.png
+base theme = rootcandy
+engine = phptemplate
+stylesheets[all][] = fixed.css
+
+regions[admin_left] = Left sidebar
+regions[admin_right] = Right sidebar
+regions[content] = Content
+regions[header] = Header
+regions[footer] = Footer
+regions[dashboard_left] = Dashboard Left
+regions[dashboard_right] = Dashboard Right
+
+core = 6.x
+
+; Settings
+settings[rootcandy_navigation_icons] = 0
+settings[rootcandy_navigation_icons_size] = 24
+settings[rootcandy_header_display] = 0
+settings[rootcandy_navigation_custom_icons] = ''
+settings[rootcandy_dashboard_display] = 0
+settings[rootcandy_dashboard_help] = 'left'
+settings[rootcandy_dashboard_messages] = 'right'
+settings[rootcandy_dashboard_content_display] = 0
+; Information added by drupal.org packaging script on 2008-10-25
+version = "6.x-1.0-rc3"
+core = "6.x"
+project = "rootcandy"
+datestamp = "1224960017"
+

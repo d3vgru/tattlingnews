@@ -1,0 +1,41 @@
+<?php
+
+function img_extractor_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time
+  $t = get_t();
+  
+  if ($phase == 'runtime') {
+     $api_key = variable_get('img_extractor_flickr_api_key', '');
+     if (empty($api_key)) {
+        $requirements['img_extractor_apikey'] = array(
+          'title' => $t('Flickr API key missing!'),
+          'description' => $t('Please indicate Flick !apiurl in img_extractor module\'s !settings.', 
+              array(
+                '!apiurl' => l($t('API Key'), 'http://www.flickr.com/services/api/keys/apply/'),
+                '!settings' => l($t('settings'), 'admin/settings/img-extractor'),
+              )
+              ),
+          'severity' => REQUIREMENT_ERROR
+        );
+     }
+  
+    $folderpath = variable_get('img_extractor_photos_folder', 'extr_photos');
+    $folderpath = file_create_path($folderpath);
+    $folder_exists = file_check_directory($folderpath, FILE_CREATE_DIRECTORY);
+    if(!$folder_exists) {
+      $requirements['img_extractor'] = array(
+        'title' => $t('Image Extractor Folder Could not be created!'),
+        'description' => $t('Could not create Image Extractor Folder: %folder indicated in the settings for the module to work properly.', array('%folder'=>$folderpath) ),
+        'severity' => REQUIREMENT_ERROR
+      );
+    } else {
+      $requirements['img_extractor'] = array(
+        'title' => $t('Image Extractor Folder %folder Exists and Is Writable.', array('%folder'=>$folderpath)),
+        'severity' => REQUIREMENT_OK
+      );      
+    }
+  }
+
+  return $requirements;
+}

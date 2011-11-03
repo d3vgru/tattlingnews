@@ -1,0 +1,778 @@
+/* $Id: style.css,v 1.33.2.4 2008/10/11 09:40:59 sign Exp $ */
+
+html {
+  overflow-y: scroll;
+}
+
+body {
+  margin: 0px;
+  padding: 0px;
+  font: 14px/170% Verdana, Arial, Helvetica, sans-serif;
+  background: #fff;
+}
+
+a, a:active {
+  color: #027ac6;
+  text-decoration: underline;
+}
+
+a:hover {
+  text-decoration: none;
+}
+
+h1 {
+  margin: 0px;
+}
+
+.clear {
+  clear: both;
+}
+
+/*
+ * page layout
+ */
+
+#header {
+  font-size: .8em;
+  color: #ffffff;
+  background: #313332 url(images/header_bg.png) repeat-x bottom;
+  text-align: center;
+}
+
+#go-home {
+  float: left;
+  padding: 2px 0 0 32px;
+  background: url(images/oxygen/gohome.png) no-repeat 4px 4px;
+}
+
+#go-home a, #admin-links a {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+#go-home a:hover, #admin-links a:hover {
+  text-decoration: underline;
+}
+
+#header-title {
+  padding: 2px 0 0 0;
+  color: #a7a7a7;
+}
+
+#admin-links {
+  padding: 2px 10px 0 0;
+  color: #fff;
+  float: right;
+  padding: 0px;
+  margin: 0px 10px 0 0;
+}
+
+#admin-links .user-name {
+  font-weight: bold;
+}
+
+#admin-links .user-logout{
+  background: url(images/oxygen/signout.png) no-repeat right;
+}
+
+#admin-links .user-logout:hover {
+  text-decoration: none;
+}
+
+#admin-links .user-logout span{
+  visibility: hidden;
+}
+
+/*
+ * Main navigation tabs
+ */
+
+.rootcandyspan{
+  padding: 0 5px;
+}
+
+#navigation {
+  float: left;
+  width: 100%;
+  background: url(images/navigation_bg.png) repeat-x bottom;
+  background-color: #b2c8d3;
+  color: #b2c8d3;
+  font-size: 94%;
+  line-height: normal;
+}
+
+#navigation ul {
+  margin: 0;
+  padding: 5px 10px 0;
+  list-style: none;
+}
+
+#navigation li {
+  float: left;
+  margin: 0;
+  padding: 0 0 0 5px;
+  text-align: center;
+}
+
+#navigation a {
+  float: left;
+  display: block;
+  padding: 5px 11px 1px 6px;
+  text-decoration: none;
+  font-weight: normal;
+  color: #000;
+}
+
+/* Commented Backslash Hack hides rule from IE5-Mac \*/
+#navigation a {
+  float: none;
+}
+/* End IE5-Mac hack */
+
+#navigation a:hover {
+  color: #c0c0c0;
+}
+
+#navigation #current {
+  background: url(images/tabs/tableft.png) no-repeat left top;
+}
+
+#navigation #current a {
+  background: url(images/tabs/tabright.png) no-repeat right top;
+  color: #027ac6;
+  padding-bottom: 2px;
+}
+
+#navigation #logo {
+  float: right;
+  margin-right: 20px;
+}
+
+#logo {
+  float: right;
+  padding-right: 10px;
+}
+
+.content-in {
+  background: url(images/content_bg.gif);
+  margin: 5px;
+  font-size: 90%;
+  float: left;
+  width: 100%;
+  margin: 0 5px 0 0;
+}
+
+ul#rootcandy-menu {
+  width: 211px;
+  margin: 0;
+  padding: 0;
+}
+
+#rootcandy-menu li {
+  padding: 2px;
+  text-align: right;
+  padding-right: 8px;
+  list-style: none;
+}
+
+#rootcandy-menu li.active {
+  background-color: #fff;
+  border-top: 1px solid #dcf0f6;
+  border-bottom: 1px solid #dcf0f6;
+}
+
+#rootcandy-menu li.active a, #rootcandy-menu a.active-trail {
+  color: #000;
+  font-weight: bold;
+}
+
+#content-main {
+  background-color: #f3f7fc;
+}
+
+#rootcandy-menu a {
+  text-decoration: none;
+  font-size: 90%;
+}
+
+#rootcandy-menu a.active {
+  color: #f00;
+  font-weight: bold;
+}
+
+div.admin-content {
+  padding: 10px;
+  min-height: 200px;
+}
+
+#placeholder {
+  height: 1em;
+}
+
+#content-wrap {
+  background: white;
+  min-width: 780px;
+  max-width: 1260px;
+  margin: 0 auto 10px auto;
+  clear: both;
+  width: expression(document.body.clientWidth < 782? "780px" : document.body.clientWidth > 1262? "1260px" : "auto");
+}
+
+#content-wrap #inside {
+  margin: 0 10px 0 0;
+  padding: 0;
+}
+
+#content {
+  padding-left: 10px;
+  padding-top: 0px;
+  background: #fff;
+}
+
+.sidebar-left #content {
+  padding-left: 210px;
+}
+
+.sidebar-right #content {
+  padding-right: 210px;
+}
+
+.sidebars #content {
+  padding-left: 210px;
+  padding-right: 210px;
+}
+
+#sidebar-right {
+  width: 210px;
+  float: right;
+}
+
+#sidebar-left {
+  width: 210px;
+  float: left;
+}
+
+.t {background: #f4f7f8 url(images/window/t.gif) 0 0 repeat-x;}
+.b {background: url(images/window/b.gif) 0 100% repeat-x}
+.l {background: url(images/window/l.gif) 0 0 repeat-y}
+.r {background: url(images/window/r.gif) 100% 0 repeat-y}
+.bl {background: url(images/window/bl.gif) 0 100% no-repeat}
+.br {background: url(images/window/br.gif) 100% 100% no-repeat}
+.tl {background: url(images/window/tl.gif) 0 0 no-repeat}
+.tr {background: url(images/window/tr.gif) 100% 0 no-repeat; padding: 10px}
+
+.navigation-menu {
+  margin: 20px;
+}
+
+.navigation-menu dd {
+  color: #a0a0a0;
+  padding-bottom: 10px;
+}
+
+div.help {
+  border: 1px solid #e7e7e7;
+  background-color: #f7f7f7;
+  padding: 0;
+  background-position: 10px 13px !important;
+}
+
+.help p {
+  margin: 5px;
+}
+
+table {
+  margin: 1em 0;
+  width: 100%;
+}
+
+thead th {
+  border-bottom: 2px solid #c0c0c0;
+  color: #494949;
+  font-weight: bold;
+}
+
+th a:link, th a:visited {
+  color: #027ac6;
+}
+
+td, th {
+  padding: .3em .5em;
+}
+
+tr.even, tr.odd, tbody th {
+  border: solid #f1f5f8;
+  border-width: 1px 0;
+}
+
+tr.odd, tr.info {
+  background-color: #f4f7f8;
+}
+
+tr.even {
+  background-color: #fff;
+}
+
+tr.drag {
+  background-color: #fdfcf4;
+}
+
+tr.drag-previous {
+  background-color: #faf9e5;
+}
+
+tr.odd td.active {
+  background-color: #f4f7f8;
+}
+
+tr.even td.active {
+  background-color: #f7f9fa;
+}
+
+td.region, td.module, td.container, td.category {
+  border-top: 1.5em solid #fff;
+  border-bottom: 1px solid #e9f0f5;
+  background-color: #f2f5f7;
+  color: #454f67;
+  font-weight: bold;
+}
+
+tr:first-child td.region, tr:first-child td.module, tr:first-child td.container, tr:first-child td.category {
+  border-top-width: 0;
+}
+
+span.form-required {
+  color: #ffae00;
+}
+
+span.submitted, .description {
+  font-size: 0.92em;
+  color: #898989;
+}
+
+.description {
+  line-height: 150%;
+  margin-bottom: .75em;
+  color: #898989;
+}
+
+.messages, .preview, .help {
+  margin: .75em 0 .75em;
+  padding: .5em 1em;
+}
+
+.messages ul {
+  margin: 0;
+}
+
+.messages {
+  background-color: #fff;
+  border: 1px solid #b8d3e5;
+}
+
+div.status {
+  color: #33a333;
+  border-color: #c7f2c8;
+}
+
+div.error, tr.error {
+  color: #a30000;
+  background-color: #FFCCCC;
+  padding: 5px;
+}
+
+.block-region {
+  padding: .5em;
+  background: transparent;
+  border: 1px dashed #b4d7f0;
+  text-align: center;
+  font-size: 1em;
+}
+
+.block {
+  padding: 0 .5em;
+}
+
+.block h2 {
+  font-weight: bold;
+  line-height: 1.8em;
+  font-size: 1.2em;
+  color: #027ac6;
+  font-size: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+}
+
+.block .content {
+  font-size: 90%;
+}
+
+#footer {
+  clear: both;
+  text-align: center;
+}
+
+.node-form .standard  {
+  clear: none;
+}
+
+#TB_ajaxContent fieldset {
+  display: inline;
+}
+
+#fieldsetcontainer a {
+  margin: 2px;
+}
+
+#fieldsetcontainer a:hover {
+  color: #000;
+}
+
+ul.primary{
+  border: none;
+}
+
+ul.primary li a, ul.primary li.active a {
+  border: none;
+}
+
+#breadcrumb .alone {
+  padding: 20px;
+}
+
+.breadcrumb {
+  font-size: 80%;
+  padding-left: 22px;
+  color: #a0a0a0;
+  float: left;
+}
+
+#breadcrumb h2 {
+  float: right;
+  padding: 0;
+  margin: 0;
+  padding-right: 20px;
+  color: #027ac6;
+  font-size: 120%;
+  font-weight: bold;
+}
+
+h2#title {
+  margin-top: 4px;
+}
+
+.admin-list a {
+  font-weight: bold;
+  line-height: 1.8em;
+}
+
+input.form-submit,
+input.teaser-button {                                    /* default styling for all form buttons */
+  background: transparent url(images/buttons/blue-button.png) no-repeat top;
+  border: 1px solid #fff;
+  color: #fff;
+  cursor: pointer;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 96%;
+  font-weight: bold;
+  margin: 0 4px;
+  padding: 2px 4px;
+  text-transform: uppercase;
+  outline: 1px solid #9BABB0;
+  -moz-border-radius: 4px;
+  -moz-outline-radius: 4px;
+  -webkit-border-radius: 4px;
+}
+
+.node-form input#edit-submit.form-submit,
+input#edit-save.form-submit {
+  background: transparent url(images/buttons/green-button.png) no-repeat top;
+}
+
+input#edit-delete.form-submit,
+#system-modules-uninstall input#edit-submit,
+#user-multiple-delete-confirm input#edit-submit {
+  background: transparent url(images/buttons/red-button.png) no-repeat top;
+}
+
+input.form-submit:hover,
+input.teaser-button:hover,
+input#edit-save.form-submit,
+.node-form input#edit-submit.form-submit:hover,
+input#edit-delete.form-submit:hover,
+ #system-modules-uninstall input#edit-submit:hover,
+#user-multiple-delete-confirm input#edit-submit:hover   {
+  background-position: bottom;
+  cursor: pointer;
+}
+
+#legal-notice {
+  font-size: 80%;
+  color: #999;
+  text-align: center;
+}
+
+#legal-notice a {
+  background: transparent url(images/extlink.gif) no-repeat scroll right center;
+  padding-right: 12px;
+}
+
+/*
+ * tabs in content
+ */
+.level-1 h2 {
+  color: #027ac6;
+  font-size: 120%;
+  font-weight: bold;
+}
+
+#tabs-primary {
+  width: 100%;
+  font-size: 93%;
+  line-height: normal;
+  background: url(images/tabs/bg.gif) repeat-x bottom;
+  float: left;
+}
+
+#tabs-primary ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#tabs-primary li {
+  float: left;
+  margin: 0;
+  padding: 0 0 0 9px;
+}
+
+#tabs-primary a {
+  float: left;
+  display: block;
+  padding: 5px 15px 4px 6px;
+  text-decoration: none;
+  font-weight: bold;
+  color: #027ac6;
+  background: none;
+}
+
+/* Commented Backslash Hack hides rule from IE5-Mac \*/
+#tabs-primary a {
+  float: none;
+}
+/* End IE5-Mac hack */
+
+#tabs-primary a:hover {
+  color: #000;
+  text-decoration: underline;
+}
+
+#tabs-primary .active {
+  background: url(images/tabs/left.gif) no-repeat left top;
+}
+
+#tabs-primary .active a {
+  background: url(images/tabs/right.gif) no-repeat right top;
+  color: #333;
+  padding-bottom: 5px;
+}
+
+#tabs-secondary {
+  border: none;
+  width: 100%;
+  font-size: 93%;
+  line-height: normal;
+  background: url(images/tabs/bg-2.gif) repeat-x bottom;
+  float: left;
+}
+
+#tabs-secondary ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: none;
+}
+
+#tabs-secondary li {
+  float: left;
+  margin: 0;
+  padding: 0 0 0 9px;
+  border: none;
+}
+
+#tabs-secondary a {
+  float: left;
+  display: block;
+  padding: 5px 15px 4px 6px;
+  text-decoration: none;
+  font-weight: bold;
+  color: #027ac6;
+  background: none;
+  border: none;
+}
+
+/* Commented Backslash Hack hides rule from IE5-Mac \*/
+#tabs-secondary a {
+  float: none;
+}
+/* End IE5-Mac hack */
+
+#tabs-secondary a:hover {
+  color: #000;
+}
+
+#tabs-secondary .active {
+  background: url(images/tabs/left-2.gif) no-repeat left top;
+  color: #000;
+}
+
+#tabs-secondary .active a {
+  background: url(images/tabs/right-2.gif) no-repeat right top;
+  color: #000;
+  padding-bottom: 5px;
+}
+
+/*
+ * pager
+ */
+
+.item-list .pager li {
+  padding: 0;
+  margin: 2px;
+}
+
+.pager li.pager-current, .pager li a {
+  background: transparent url(images/buttons/blue-button.png) no-repeat top;
+  -moz-border-radius-bottomleft:2px;
+  -moz-border-radius-bottomright:2px;
+  -moz-border-radius-topleft:2px;
+  -moz-border-radius-topright:2px;
+  border:1px solid #90C2E1;
+  margin:0;
+  border: 1px solid #fff;
+  color: #fff;
+  cursor: pointer;
+  font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif;
+  font-size: 96%;
+  font-weight: bold;
+  text-transform: uppercase;
+  outline: 1px solid #9BABB0;
+  -moz-border-radius: 4px;
+  -moz-outline-radius: 4px;
+  -webkit-border-radius: 4px;
+  padding: 2px 4px;
+  text-decoration: none;
+}
+
+.pager a:hover,
+.pager li.pager-current {
+  background: transparent url(images/buttons/blue-button.png) no-repeat bottom;
+  text-decoration:none;
+  color: #000;
+}
+
+.pager a,
+.pager li.pager-current {
+  padding: 2px 4px;
+}
+
+.pager {
+  text-align:center;
+}
+
+/*******************************************************************
+ * Color Module: Don't touch                                       *
+ *******************************************************************/
+
+.level-1 {
+  border-bottom: 1px solid #d2dada;
+  border-right: 1px solid #d2dada;
+  border-left: 1px solid #d2dada;
+  border-top: 0;
+  background: #f2f2f2;
+  padding: 4px;
+  clear: both;
+}
+
+.level-2 {
+  border-bottom: 1px solid #dcdcdc;
+  border-right: 1px solid #dcdcdc;
+  border-left: 1px solid #dcdcdc;
+  border-top: 0;
+  background: #fff;
+  padding: 4px;
+  clear: both;
+}
+
+/*
+ * node-add-list
+ */
+
+.node-type-list a {
+  font-weight: bold;
+}
+
+/*
+ * views
+ */
+
+#views-ui-admin-tools input#edit-clear-cache {
+  margin-top: 5px;
+}
+
+#views-ui-edit-view-form {
+  margin-top: 10px;
+}
+
+#edit-add-display {
+  margin-bottom: 10px;
+}
+
+.remove-display input.form-submit {
+  background: transparent url(images/buttons/red-button.png) no-repeat top;
+}
+
+.remove-display input.form-submit:hover  {
+  background-position: bottom;
+  cursor: pointer;
+}
+
+.views-tabset {
+  background: transparent;
+}
+
+#views-ui-analyze-view-button {
+  margin: 10px 0;
+}
+
+/* dashboard */
+#dashboard-left {
+  float: left;
+  width: 48%;
+}
+
+#dashboard-right {
+  float: right;
+  width: 48%;
+}
+
+#dashboard-left h2, #dashboard-right h2 {
+  border: 1px solid #e7e7e7;
+  background-color: #f7f7f7;
+  padding: 6px;
+}
+
+#dashboard-left .block, #dashboard-right .block {
+  margin: 0;
+  padding: 0;
+}
+
+#dashboard-left .block .content, #dashboard-right .block .content {
+  padding: 5px 10px;
+}
+
+#dashboard-left h3, #dashboard-right h3 {
+  padding: 0;
+  margin: 0px 2px;
+}

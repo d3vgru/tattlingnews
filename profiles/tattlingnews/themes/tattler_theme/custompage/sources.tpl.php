@@ -1,0 +1,1 @@
+<?php print custompage_view_tile( 'sources', $title=FALSE, 'block_1'); ?>

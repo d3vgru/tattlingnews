@@ -1,0 +1,46 @@
+/* $Id: plus1.css,v 1.1.4.3 2011/01/13 18:14:07 nancyw Exp $ */
+
+div.plus1-widget {
+  background-color: #fbfbe6;
+  border-top: 1px #fbf389 solid;
+  border-bottom: 1px #fbf389 solid;
+  line-height: 1.6em;
+  text-align: center;
+  width: 4em;
+}
+
+div.plus1-widget a {
+  text-decoration: none;
+}
+
+div.plus1-widget .plus1-score {
+  font-size: 100%;
+}
+
+div.plus1-widget .plus1-vote button {
+  background: url(images/up.png) no-repeat center center;
+  border: 0;
+  display: block;
+  height: 2em;
+  outline: none;
+  overflow: visible;
+  padding: 0;
+  text-indent: -999em;
+  width: 100%;
+}
+
+#block-plus1-most_votes .item-list ul {
+  /* padding: 0; */
+}
+
+.plus1-link-count {
+  /* background-color: #b45608;
+  color: #ffffff;
+  padding: 1px 3px;
+  width: 2em;
+  -moz-border-radius: 4px; */
+}
+
+.plus1-author-text {
+  font-size: 89%;
+}

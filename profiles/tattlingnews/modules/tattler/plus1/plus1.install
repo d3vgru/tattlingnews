@@ -1,0 +1,91 @@
+<?php
+// $Id: plus1.install,v 1.1.4.2 2011/01/13 16:14:32 nancyw Exp $
+
+/**
+ * @file
+ * A simple +1 voting widget module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function plus1_install() {
+  // Create tables.
+  drupal_install_schema('plus1');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function plus1_schema() {
+  return array();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function plus1_uninstall() {
+  // Remove tables.
+  drupal_uninstall_schema('plus1');
+
+  db_query("DELETE FROM {variable} WHERE name LIKE 'plus1\_%");
+}
+
+/**
+ * Upgrade to using VotingAPI 2.
+ */
+function plus1_update_6200() {
+  $ret = array();
+
+  if (db_table_exists('plus1_vote')) {
+    // Convert v1 style vote table to votingapi. See project page.
+    $result = db_query("SELECT * FROM {plus1_vote}");
+    while ($row = db_fetch_object($result)) {
+      $insert = db_query("INSERT INTO {votingapi_vote} (content_type, content_id, value, value_type, tag, uid, timestamp, vote_source) VALUES('node', $row->nid, $row->vote, 'points', 'vote', $row->uid, $row->created, '127.0.0.1')");
+      if ($insert !== FALSE) {
+        // Deleting the converted records allows this to be re-run if time runs out.
+        db_query("DELETE FROM {plus1_vote} WHERE uid = $row->uid AND nid = $row->nid AND created = $row->created");
+      }
+    }
+
+    db_drop_table($ret, 'plus1_vote');
+
+    // Tell them how to update.
+    $ret[] = array('success' => TRUE, 'query' => t('Set your Votingapi "Vote tallying" option for cron-time and invoke cron. You may then set the option back.'));
+  }
+  else {
+    $ret[] = array('success' => TRUE, 'query' => t('This is not an update from version 1, so this update was bypassed.'));
+  }
+
+  return $ret;
+}
+
+
+/**
+ * Implements hook_update_N().
+ * Set weight within a normal delta.
+ * No content types by default.
+ */
+function plus1_update_6201() {
+  $ret = array();
+
+  $w = variable_get('plus1_weight', 'not set');
+  if ($w != 'not set') {
+    $w = (int) $w;
+    $x = $w > 20 ? 20 : ($w < -20 ? -20 : $w);
+    if ($x != $w) {
+      variable_set('plus1_weight', $x);
+      $ret[] = array('success' => TRUE, 'query' => "Widget weight changed to $x.");
+    }
+  }
+
+  $t = variable_get('plus1_nodetypes', array());
+  if (!$t) {
+    variable_get('plus1_nodetypes', array('story'));
+    $ret[] = array('success' => TRUE, 'query' => 'Voting enabled for "story."');
+  }
+
+
+  return $ret;
+}
+

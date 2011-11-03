@@ -1,0 +1,359 @@
+<?php
+define ('IMG_EXTRACTOR_BATCH_SIZE', 5); //most nodes do not have images so we can set it high
+define ('IMG_EXTRACTOR_LAST_DECOR_FIELDNAME', 'field_last_decorated_m');
+
+function img_extractor_menu() {
+  $items = array();
+
+  $items['admin/settings/img-extractor'] = array(
+    'title' => 'Image Extractor Settings',
+    'description' => 'Configuration options for the Image Extractor module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('img_extractor_settings'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+   );
+
+  $items['img_extractor/test'] = array(
+    'title' => 'Image Extractor Test',
+    'page callback' => 'img_extractor_test',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+function img_extractor_test() {
+
+ /** $pid = '3030426018';
+    
+  $img_url = img_extractor_flickr_img_url($pid); 
+  
+  echo('<img src="'.$img_url.'" />');
+  
+  **/
+  
+  //img_extractor_cron();
+  
+  return "success";
+}
+
+
+/**
+* Nodes are processed in batches on cron run, not on node_save.
+* This is necessary to avoid delays during node save, which is
+* much more critical than this 'nice-to-have' decoration process.
+*/
+function img_extractor_cron() {
+  
+/** TEST
+
+  $nid = 6776;
+  $node = node_load($nid);
+  $body = $node->body;
+  $image_urls = img_extractor_get_images($body);
+  
+  return "success";
+**/
+
+  $limit = IMG_EXTRACTOR_BATCH_SIZE; 
+  $decor_fname = IMG_EXTRACTOR_LAST_DECOR_FIELDNAME;
+      
+      /* 
+      * Only process a node once in its lifetime - more than sufficient.
+      *
+      * Only process nodes that have one of two patterns in the body:
+      * 1) either an <img tag or "flickr/photos" which would indicate
+      * a Flick URL. Most nodes have neither and this prevents us from
+      * wasting cycles on nodes that have no images. Maybe query is a little
+      * slower with the "SQL LIKE", but all-in-all process is much more efficient.
+      *
+      */
+      $query = db_query_range("
+          SELECT n.nid, n.vid, r.body
+          FROM {content_type_mention} m
+          JOIN {node} n ON n.nid=m.nid AND n.vid=m.vid
+          JOIN {node_revisions} r ON r.nid=m.nid AND r.vid=m.vid          
+          WHERE  n.type='mention' 
+            AND (r.body like '%s' OR r.body like '%s') AND m.${decor_fname}_value IS NULL
+          ORDER BY n.changed asc",          
+          '%<img%', '%flickr.com/photos%', 0, $limit);
+      
+        while ($obj = db_fetch_object($query)) {
+        
+          $image_urls = img_extractor_get_images($obj->body);
+                        
+          if (is_array($image_urls)) {
+          
+            //NOT using node_save here purely for the sake of performance! Gotta have these quick.          
+            @db_query("DELETE FROM {content_field_images_m}
+                     WHERE nid=%d AND vid=%d", $obj->nid, $obj->vid);
+            
+            $delta = 0;
+            foreach ($image_urls as $m) {
+              @db_query("INSERT INTO {content_field_images_m}
+                         (nid,vid,delta,field_images_m_value)
+                         VALUES(%d, %d, %d, '%s')",
+                         $obj->nid, $obj->vid, $delta, $m);
+              $delta++;
+            }
+           
+            // Mark as processed 
+            @db_query("UPDATE {content_type_mention}
+                       SET ${decor_fname}_value = %d          
+                       WHERE nid=%d AND vid=%d",
+                       time(), $obj->nid, $obj->vid);
+          }          
+        }
+
+  // Clear the page and block caches.
+  cache_clear_all();
+}
+
+function img_extractor_get_images($html) {
+
+  $img_urls = array();
+  
+  $flickr_img_urls = _img_extractor_get_flickr_images($html);
+  $linked_img_urls = _img_extractor_get_linked_images($html);
+  
+  $img_urls = array_merge($flickr_img_urls, $linked_img_urls);
+  
+  return $img_urls;
+}
+
+function _img_extractor_get_flickr_images($html) {
+  $img_urls = array();
+  
+  $flickr_pattern = '#<a.*?href.*?=.*?"http://www\.flickr\.com/photos/.+?/(.+?)/.*?".*?>#ims';
+  $ret = preg_match_all($flickr_pattern, $html, $tmp_matches);
+  if ($ret===FALSE) {
+    return array();
+  }
+
+  if (is_array($tmp_matches[1])) { //found more than one images;
+    $matches = $tmp_matches[1];
+  }
+  else if(!empty($tmp_matches[1])) {
+    $matches = array($tmp_matches[1]);
+  }
+  else {
+    $matches = array();
+  }
+  
+  if (is_array($matches)) {
+    foreach($matches as $m) {
+      $img_url = img_extractor_flickr_img_url($m);
+      if ($img_url!==FALSE) {
+        $img_urls[] = check_url($img_url);
+      }
+    }
+  }
+  
+  return $img_urls;
+}
+
+/**
+* These need to be downloaded so that imagecache can resize them.
+*/
+function _img_extractor_get_linked_images($html) {
+
+  $folderpath = variable_get('img_extractor_photos_folder', 'extr_photos');
+  $folderpath = file_create_path($folderpath);
+  $folder_exists = file_check_directory($folderpath, FILE_CREATE_DIRECTORY);
+  if (!$folder_exists) return array();
+
+  $img_urls = array();
+  
+  $pattern = '#<img.+?src="(.+?)".+?>#ims';
+  
+  $ret = preg_match_all($pattern, $html, $tmp_matches);
+  if ($ret===FALSE) {
+    return array();
+  }
+
+  if (is_array($tmp_matches[1])) { //found more than one images;
+    $matches = $tmp_matches[1];
+  }
+  else if(!empty($tmp_matches[1])) {
+    $matches = array($tmp_matches[1]);
+  }
+  else {
+    $matches = array();
+  }
+  
+  if (is_array($matches)) {
+    foreach($matches as $m) {
+      $img_url = img_extractor_download_linked_img($m);
+      if ($img_url !== FALSE) {
+        $img_urls[] = check_url($img_url);
+      }      
+    }
+  }
+  
+  return $img_urls;  
+  
+}
+
+function img_extractor_download_linked_img($url) {
+
+  $folderpath = variable_get('img_extractor_photos_folder', 'extr_photos');
+  $folderpath = file_create_path($folderpath);
+  $folder_exists = file_check_directory($folderpath, FILE_CREATE_DIRECTORY);
+  if (!$folder_exists) return FALSE;
+
+  $result = drupal_http_request($url);
+
+  if ((int)$result->code > 399) {
+    error_log ( 'Could not download image: ' .
+                $url . 'in img_extractor. Err Message: ' . $result->error );
+    return FALSE;
+  }
+  
+  $data = $result->data;
+
+  $parsed = parse_url($url);
+  $path = $parsed['path'];
+  // Don't want to use basename($path, 'filename') since that would make us require PHP 5.2+
+  $path = explode('/', $path);
+  if (!is_array($path)) return FALSE;
+  $pos = sizeof($path)-1;
+  $filename = $path[$pos];
+  $filename = str_replace('%20', ' ', $filename);
+
+  $path = $folderpath . '/' . $filename;
+  
+  $new_filename = file_save_data($data, $path, $replace = FILE_EXISTS_RENAME);
+  
+  // Some extra security here, just in case. Thanks Drupal for this function!
+  if (!file_validate_is_image($new_filename)) {
+    return FALSE;
+  }
+  
+  $url = file_create_url($new_filename);
+  
+  return $url;
+  
+}
+
+/**
+*
+* Retrieve the URL of a photo file from the URL of a photo page (that is
+* what comes in through Flickr RSS. The Pattern of the Photo page URL is:
+*
+* http://www.flickr.com/photos/{user}/{photo_id}/
+* e.g.: http://www.flickr.com/photos/worldbank/3029594395/
+*
+* @param $photo_id
+*
+* @param $size
+*       can be one of: 
+*          *empty* original
+*          s	small square 75x75
+*          t	thumbnail, 100 on longest side
+*          m	small, 240 on longest side
+*
+* @return 
+*       $img_url or FALSE on failure.
+*/
+function img_extractor_flickr_img_url($photo_id, $size = '') {
+  
+ $api_key = variable_get('img_extractor_flickr_api_key', '');
+ 
+ if (empty($api_key)) return FALSE;
+
+ $params = array(
+  	'api_key'	=> $api_key,
+  	'method'	=> 'flickr.photos.getInfo',
+  	'photo_id'	=> $photo_id,
+  	'format'	=> 'php_serial',
+  );
+  
+  $api_url = 'http://api.flickr.com/services/rest/';
+  $api_query =  http_build_query($params, '', '&');
+  
+  $headers = array();
+  
+  $result = drupal_http_request($api_url . '?' . $api_query, $headers, 'GET');
+    
+  if ($result->code != '200') {
+    error_log ( 'FeedAPI Source WARNING: Error returned while trying to look up Flickr for: ' .
+                $this->url . ' Err Message: ' . $result->error );
+    return FALSE;
+  }
+    
+  $rsp_obj = unserialize($result->data);
+  
+  if ($rsp_obj['stat']=='fail') return FALSE;
+  
+  $photo = (object)$rsp_obj['photo'];
+  $farm_id = $photo->farm;
+  $server_id = $photo->server;
+  $id = $photo->id;
+  $secret = $photo->secret;
+  
+  if (!empty($size)) { $size = '_' . $size; }
+  $img_url = "http://farm{$farm_id}.static.flickr.com/{$server_id}/{$id}_{$secret}{$size}.jpg";
+  
+  return $img_url;
+}
+
+
+function img_extractor_settings() {
+
+  $form['img_extractor_flickr_api_key'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Flickr API Key'),
+    '#default_value' => variable_get('img_extractor_flickr_api_key', ''),
+    '#size' => 50,
+    '#maxlength' => 50,
+    '#description' => t('You can get a Flickr.com API Key ' . l('here', 'http://www.flickr.com/services/api/keys/apply/', array('attributes' => array('target' => '_blank'))) . '.')
+  );
+
+  $form['img_extractor_photos_folder'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Folder To Save Downloaded Photos To'),
+    '#default_value' => variable_get('img_extractor_photos_folder', 'extr_photos'),
+    '#size' => 50,
+    '#maxlength' => 50,
+    '#description' => t('Indicate a folder relative to the Drupal "Files" folder where downloaded photos will be saved to')
+  );
+  
+  return system_settings_form($form);
+}
+
+
+function img_extractor_thumbnail($img_url, $image_cache_profile_name, $width, $height) {
+
+  if (strpos($img_url, 'static.flickr.com')!==FALSE) { 
+  
+    //Flick images do not need resizing with imagecache, Flickr has sizes.
+    //It gotta be jpg, png or gif
+    $img_url = str_replace('.jpg', '_s.jpg', $img_url); //Get Small size
+    $img_url = str_replace('.png', '_s.jpg', $img_url); //Get Small size
+    $img_url = str_replace('.gif', '_s.jpg', $img_url); //Get Small size
+    
+    $img_url = check_url($img_url); 
+    $attributes = array('width'=> $width . 'px', 'height'=> $height . 'px');
+    $title = check_plain(t('Thumbnail'));
+    
+    $attributes = drupal_attributes($attributes);
+    
+//    echo '<pre>' . print_r( $attributes, TRUE) . '</pre>'; 
+//exit();
+    $img_tag = '<img src="'. check_url($img_url) .'" alt="'. $title .'" title="'. $title .'" '. $attributes .' />';
+   
+  } else { //resize with imagecache
+  
+    // We need to transform full URL into relative URI (relative to files folder) for imagecache to work!
+    $folderpath = file_directory_path();
+    $pos = strpos($img_url, $folderpath);
+    $pos = $pos + strlen($folderpath)+1;
+    $img_url = substr($img_url, $pos);
+  
+    $img_tag =  theme_imagecache($image_cache_profile_name, $img_url); 
+  }
+  
+  return $img_tag;
+}

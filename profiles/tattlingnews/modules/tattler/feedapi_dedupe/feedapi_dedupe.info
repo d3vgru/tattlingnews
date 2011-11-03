@@ -1,0 +1,14 @@
+; $Id: feedapi_dedupe.info,v 1.1 2009/10/13 19:25:36 inadarei Exp $
+name = FeedAPI De-Dupe
+description = "Aggressive De-duplication for FeedAPI Feeds."
+package = BuzzMonitor
+dependencies[] = feedapi_itemfilter
+core = 6.x
+
+
+; Information added by drupal.org packaging script on 2009-10-13
+version = "6.x-1.0-rc1"
+core = "6.x"
+project = "feedapi_dedupe"
+datestamp = "1255462261"
+

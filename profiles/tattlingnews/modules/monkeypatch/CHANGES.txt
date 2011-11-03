@@ -1,0 +1,4 @@
+buzzmonitor/buzz_topics/buzz_topics.info: remove dependency on parser_common_syndication (provided by Feeds)
+buzzmonitor/feed_api_source/feed_api_source.info: remove dependency on parser_common_syndication (provided by Feeds)
+mn_core/mn_core.strongarm.inc: fixed OpenLayers path
+purl/purl.module: added line 737

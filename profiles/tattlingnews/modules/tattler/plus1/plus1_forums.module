@@ -1,0 +1,117 @@
+<?php
+// $Id: plus1_forums.module,v 1.1.2.1 2011/01/13 16:14:32 nancyw Exp $
+
+/**
+ * @file
+ * Limit which forums allow voting.
+ */
+
+/**
+ * Implementation of hook_plus1_access().
+ */
+function plus1_forums_plus1_access($node, $op, $account) {
+  if ($node->type == 'forum') {
+    // Only show widget on selected forums.
+    if (in_array($node->forum_tid, variable_get('plus1_forums', array()))) {
+      return PLUS1_ACCESS_ALLOW;
+    }
+    else {
+      return PLUS1_ACCESS_DENY;
+    }
+  }
+
+  // Not a forum node, so ignore it.
+  return PLUS1_ACCESS_IGNORE;
+}
+
+/**
+ * Implements hook_form_alter().
+ * Add individual node vote disabling.
+ */
+function plus1_forums_form_alter(&$form, $form_state, $form_id) {
+// drupal_set_message($form_id);
+  switch ($form_id) {
+    case 'plus1_settings':
+      $form['plus1_forums_fieldset'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Forum settings'),
+        '#collapsible' => TRUE,
+        '#collapsed' => FALSE,
+        '#weight' => -3,
+        );
+
+      $fora = forum_get_forums();
+      $forums_list = array();
+      foreach ($fora as $forum) {
+        $forums_list[$forum->tid] = $forum->name;
+      }
+
+      if ($forums_list) {
+        $form['plus1_forums_fieldset']['plus1_forums'] = array(
+          '#type' => 'checkboxes',
+          '#options' => $forums_list,
+          '#title' => t('Allow voting on these forums'),
+          '#default_value' => variable_get('plus1_forums', array()),
+          '#attributes' => array('class' => 'container-inline'),
+          );
+      }
+
+      return;
+
+    case 'forum_form_forum':
+      $noyes = array(t('No'), t('Yes'));
+
+      $state = FALSE;
+      if (isset($form['tid'])) {
+        $enabled = variable_get('plus1_forums', array());
+        $state = in_array($form['tid']['#value'], $enabled);
+      }
+
+      $form['plus1_enable'] = array(
+          '#type' => 'radios',
+          '#options' => $noyes,
+          '#title' => t('Allow voting on this forum'),
+          '#default_value' => (int) $state,
+          '#description' => t('Do you want to allow Plus 1 module voting for this forum?'),
+          '#attributes' => array('class' => 'container-inline'),
+          );
+
+      $form['submit']['#weight'] = 99;
+      $form['delete']['#weight'] = 99;
+
+      // By letting the standard submit handler run first, we will get a tid
+      // filled in for new forums.
+      $form['#submit'][] = '_plus1_forums_form_submit';
+      return;
+  }
+}
+
+function _plus1_forums_form_submit($form, &$form_state) {
+  if (isset($form_state['values']['tid'])) {
+    $tid = $form_state['values']['tid'];
+  }
+  else {
+    drupal_set_message(t('Incomplete data for forum "@name".', array('@name' => $form_state['values']['name'])), 'error');
+    return;
+  }
+
+  // Get the current list of enabled forums.
+  $forums = variable_get('plus1_forums', array());
+
+  // Did they enable voting?
+  if ($form_state['values']['plus1_enable']) {
+    // Add this forum tid to the list, if it's new.
+    if (!in_array($tid, $forums)) {
+      $forums[] = $tid;
+      variable_set('plus1_forums', $forums);
+    }
+  }
+  else {
+    // They disabled voting so remove the tid from the list.
+    $key = array_search($tid, $forums);
+    if ($key !== FALSE) {
+      unset($forums[$key]);
+      variable_set('plus1_forums', $forums);
+    }
+  }
+}

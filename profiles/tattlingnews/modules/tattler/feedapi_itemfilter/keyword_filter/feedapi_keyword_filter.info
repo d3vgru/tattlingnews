@@ -1,0 +1,21 @@
+; $Id: feedapi_keyword_filter.info,v 1.2 2009/02/09 00:33:20 milosh Exp $
+name = FeedAPI keyword filter
+description = "Filters feed items based on keywords. Only these feed items, that have matched keyword(s) in the feed item description field will be saved."
+core = 6.x
+package = "FeedAPI Filter"
+version = 6.x-1.0-beta
+dependencies[] = feedapi 
+dependencies[] = feedapi_itemfilter
+
+; Information added by drupal.org packaging script on 2008-05-28
+version = "6.x-1.x-dev"
+project = "feedapi_itemfilter"
+datestamp = "1211933074"
+
+
+; Information added by drupal.org packaging script on 2009-02-11
+version = "6.x-1.1"
+core = "6.x"
+project = "feedapi_itemfilter"
+datestamp = "1234385434"
+

@@ -1,0 +1,6 @@
+OpenLayers Slim is a configured and compressed version of OpenLayers, suitable
+for most common applications. It includes the components neccessary for basic
+layers and behaviors, and omits many of the less commonly used features that
+drive up the file size.
+
+Built from OpenLayers 2.91

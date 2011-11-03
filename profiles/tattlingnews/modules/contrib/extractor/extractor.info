@@ -1,0 +1,12 @@
+; $Id: extractor.info,v 1.3 2010/08/27 18:25:18 diggersf Exp $
+name = Extractor
+description = "API for extracting terms from text"
+dependencies[] = taxonomy
+core = 6.x
+
+; Information added by drupal.org packaging script on 2010-09-21
+version = "6.x-1.0-alpha7"
+core = "6.x"
+project = "extractor"
+datestamp = "1285033561"
+

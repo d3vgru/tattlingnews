@@ -1,0 +1,16 @@
+name = BuzzMonitor Topics Setup
+description = "This module provides an automated way of setting up multiple search feeds for a keyword and makes it easy to provision a new keyword (topic)."
+dependencies[] = feedapi
+dependencies[] = feedapi_node
+;dependencies[] = parser_common_syndication
+dependencies[] = buzzmonitor
+package = "BuzzMonitor"
+core = 6.x
+php = 5.1
+
+; Information added by drupal.org packaging script on 2010-02-16
+version = "6.x-2.0-beta2"
+core = "6.x"
+project = "buzzmonitor"
+datestamp = "1266354605"
+

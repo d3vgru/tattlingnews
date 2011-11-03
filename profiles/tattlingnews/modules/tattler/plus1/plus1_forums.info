@@ -1,0 +1,12 @@
+; $Id: plus1_forums.info,v 1.1.2.1 2011/01/13 16:14:32 nancyw Exp $
+name = Plus 1 Forums
+description = "Limit which forums allow voting."
+package = Voting
+dependencies[] = plus1
+core = 6.x
+; Information added by drupal.org packaging script on 2011-02-18
+version = "6.x-2.7"
+core = "6.x"
+project = "plus1"
+datestamp = "1298048750"
+

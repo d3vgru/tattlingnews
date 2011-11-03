@@ -1,0 +1,147 @@
+/* $Id: dark.css,v 1.1.2.2 2008/10/25 18:25:50 sign Exp $ */
+
+body {
+  background: #f4f4f4;
+}
+
+a, a:active {
+  color: #000;
+  text-decoration: underline;
+}
+
+a:hover {
+  text-decoration: none;
+  color: #f27b00;
+}
+
+#header {
+  font-size: .8em;
+  color: #ffffff;
+  background: #313332 url(images/header_bg.png) repeat-x bottom;
+  text-align: center;
+}
+
+#navigation {
+  float: left;
+  width: 100%;
+  background: url(images/navigation_bg.png) repeat-x bottom;
+  background-color: #b2c8d3;
+  color: #f27b00;
+  font-size: 94%;
+  line-height: normal;
+}
+
+#navigation a {
+  color: #c0c0c0;
+}
+
+#navigation a:hover {
+  color: #f27b00;
+}
+
+#navigation #current {
+  background: url(images/tabs/tableft.png) no-repeat left top;
+}
+
+#navigation #current a {
+  background: url(images/tabs/tabright.png) no-repeat right top;
+  color: #fff;
+  padding-bottom: 2px;
+}
+
+div#breadcrumb {
+  clear: both;
+  background: url(images/breadcrumb_bg.png) repeat-x;
+  height: 10px;
+  padding-top: 8px;
+}
+
+#content {
+  background: #f4f4f4 none repeat scroll 0 0;
+}
+
+.t {background: #fff url(images/window/t.gif) 0 0 repeat-x;}
+.b {background: url(images/window/b.gif) 0 100% repeat-x}
+.l {background: url(images/window/l.gif) 0 0 repeat-y}
+.r {background: url(images/window/r.gif) 100% 0 repeat-y}
+.bl {background: url(images/window/bl.gif) 0 100% no-repeat}
+.br {background: url(images/window/br.gif) 100% 100% no-repeat}
+.tl {background: url(images/window/tl.gif) 0 0 no-repeat}
+.tr {background: url(images/window/tr.gif) 100% 0 no-repeat; padding: 10px}
+
+.content-in {
+  background: #fff;
+  background-image: none;
+}
+
+#content-wrap {
+  background: #f4f4f4;
+}
+
+th a:link, th a:visited {
+  color: #000;
+}
+
+.block h2 {
+  color: #f27b00;
+}
+
+#breadcrumb h2 {
+  color: #000;
+}
+
+.level-1 h2 {
+  color: #000;
+}
+
+#tabs-primary a {
+  color: #000;
+}
+
+#tabs-secondary a {
+  color: #000;
+}
+
+#rootcandy-menu li.active {
+  border-top: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+
+input.form-submit,
+input.teaser-button,
+.pager li.pager-current,
+.pager li a,
+.pager a:hover,
+.pager li.pager-current {
+  background: transparent url(images/buttons/orange-button.png) no-repeat top;
+}
+
+
+tr.odd, tr.info {
+  background-color: #6c6c6c;
+}
+
+tr.even {
+  background-color: #919191;
+}
+
+tr.drag {
+  background-color: #fdfcf4;
+}
+
+tr.drag-previous {
+  background-color: #faf9e5;
+}
+
+tr.odd td.active {
+  background-color: #f4f7f8;
+}
+
+tr.even td.active {
+  background-color: #f7f9fa;
+}
+
+td.description, .theme-info .description {
+color:#fff;
+}

@@ -1,0 +1,65 @@
+<?php
+// $Id: extractor.install,v 1.1 2010/09/09 20:46:25 alexb Exp $
+
+/**
+ * Implementation of hook_schema().
+ */
+function extractor_schema() {
+  $schema = array();
+  $schema['extractor_lookup'] = array(
+    'description' => 'Flags terms that should be used for lookup.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Use this term for lookup.',
+      ),
+    ),
+    'primary key' => array('tid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function extractor_install() {
+  drupal_install_schema('extractor');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function extractor_uninstall() {
+  drupal_uninstall_schema('extractor');
+}
+
+/**
+ * Install lookup flag.
+ */
+function extractor_update_6100() {
+  $ret = array();
+  $schema = array(
+    'description' => 'Flags terms that should be used for lookup.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Use this term for lookup.',
+      ),
+    ),
+    'primary key' => array('tid'),
+  );
+  db_create_table($ret, 'extractor_lookup', $schema);
+  if ($vocabulary = variable_get('extractor_simple_vid', FALSE)) {
+    $vocabulary = taxonomy_vocabulary_load($vocabulary);
+    $id = strpos($vocabulary->module, 'features_') === 0 ? $vocabuarly->module : $vocabulary->vid;
+    variable_set('extractor_simple_vocabularies', array($id));
+  }
+  variable_del('extractor_simple_vid');
+  return $ret;
+}

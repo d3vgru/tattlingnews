@@ -1,0 +1,13 @@
+core = "6.x"
+dependencies[] = "purl"
+dependencies[] = "views"
+description = "Provides a 'mode' Views display which can be attached to page views as alternative modes of display."
+name = "Views Modes"
+package = "Views Bonus Pack"
+
+; Information added by fserver
+core = "6.x"
+datestamp = ""
+project = "views_modes"
+project status url = "http://code.developmentseed.org/fserver"
+version = "6.x-1.0-beta5"

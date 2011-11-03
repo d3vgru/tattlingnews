@@ -1,0 +1,125 @@
+<?php
+// $Id: feedapi_keyword_filter.module,v 1.1 2008/05/27 19:54:22 milosh Exp $
+
+/**
+ * @file
+ * FeedAPI Keyword Filter module
+ *
+ * This is filtering module for FeedAPI Item Filter module.
+ * The module filters feed items based on user defined keywords.
+ *
+ */
+
+
+/**
+ * Implementation of hook_help()
+ *
+ */
+function feedapi_keyword_filter_help($section) {
+  switch ($section) {
+    case 'feedapi/itemfilter/full_name':
+    return t('Keyword filter');
+    break;
+  }
+}
+
+
+/**
+ * Implementation of hook_feedapi_itemfilter()
+ *
+ * @param string $op
+ *    $op = 'settings' will modify FeedAPI item filter settings page. You can define
+ *           the form for any filter-specific settings here.
+ *    $op = 'process' will process the feed with your filter.
+ * @param array $feed
+ *    This is feed array, which was returned from parsers. It is used under 'process' stage
+ * @param array $options
+ *    Array of FeedAPI options. It includes the filter options that you required
+ *           when the 'settings' page was altered.
+ * @return  if $op = 'settings' then the form array for filter settings is returned
+ *          if $op = 'process' then nothing is returned: it is expected that you
+ *                    modified feed->items directly in your code (see line 116 below).
+ */
+function feedapi_keyword_filter_feedapi_itemfilter($op, &$feed, &$options)
+{
+  switch ($op) {
+    // Prepare settings for the filter.
+    case 'settings':
+      $form['info'] = array(
+      '#type' => 'item',
+      //        '#title' => t('Information about filter'),
+      //        '#value' => t('Keyword filter will check ...'),
+      '#description' => t('Keyword filter will check the &lt;description&gt; field of feed items against a set of keyword(s)
+      immidiately after parsing. Any item, that has no maching keywords will not be saved with the feed.'),
+      '#weight' => -15,
+      );
+      $form['keywords'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Include Words'),
+      '#default_value' => $node_type_settings['feedapi']['itemfilter']['keywords'],
+      '#attributes' => '',
+      '#description' => t('Keywords that must be included in a feed item for it to be displayed - e.g. "iPhone, +battery, -problem".
+        Keywords that start with minus (-) will be used as negative keywords.
+        Please separate different keywords with comma (,). You can also use phrases - e.g. "top performance, -bad problems".'),
+        );
+        return $form;
+        break;
+
+      // Process the items.
+      case 'process':
+      // Is the filter endabled and do we have something to prcess?
+        if(!empty($options['keywords'])) { // is_null?
+
+          // Arrays for new feed item set and keywords is necessary
+          $newfeed = array();
+          $words = explode(",", $options['keywords']);
+          // If delimiter does not exist then there is only one keyword
+          if ($words == FALSE) {
+            $words = array($options['keywords']);
+          }
+
+          // There are two types of keywords -- negative and positive.
+          $worldlist = array('neg' => array(), 'pos' => array());
+
+          // So split the list into two sets.
+          foreach ($words as $word) {
+            $word = trim($word);
+            if (preg_match("/^-/", $word)) {
+              $worldlist['neg'][] = preg_replace('/^-/','', $word);
+            }
+            elseif (preg_match("/^\+/", $word)) {
+              $worldlist['pos'][] = preg_replace('/^\+/','', $word);
+            }
+            else {
+              $worldlist['pos'][] = $word;
+            }
+          }
+
+          // Get through each feed item.
+          foreach ($feed->items as $key=>$item) {
+
+            // If negative keyword has been found then move directly to next item.
+            foreach ($worldlist['neg'] as $value) {
+              // Number 2 here means that we are stepping out from both foreach statement.
+              if (stristr($item->description, $value)) continue 2;
+            }
+
+            // And now we process positive keywords.
+            foreach ($worldlist['pos'] as $value) {
+              if (stristr($item->description, $value)) {
+                // If keyword found then the item is worth saving.
+                $newfeed[] = $feed->items[$key];
+                // And there is no reason to try out remaining keywords --> move to the next item.
+                continue 2;
+              }
+            }
+          } // end of items parsing
+
+          // Let our users know about the results.
+          drupal_set_message(t('The feed %name was filtered, based on the following keywords: "%keywords". Items kept after filtering: %new out of %old.', array('%name' => $feed->title, '%keywords' => $options['keywords'], '%new' => count($newfeed), '%old' => count($feed->items))));
+            // And finally - let's replace the items with the ones that we need.
+          $feed->items = $newfeed;
+        } // endif
+        break;
+  } // end switch
+}

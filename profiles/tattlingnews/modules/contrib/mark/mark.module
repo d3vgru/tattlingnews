@@ -1,0 +1,483 @@
+<?php
+// $Id: mark.module,v 1.7 2010/09/08 13:30:32 jmiccolis Exp $
+/**
+ * @file
+ * A voting system based on views that let's uses "mark" items.
+ */
+
+/**
+ * Implementation of hook_perm().
+ */
+function mark_perm() {
+  return array('mark items', 'administer mark');
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function mark_theme() {
+  return array(
+    'mark_listing_form' => array(),
+    'mark_link' => array(
+      'template' => 'mark_link',
+      'arguments' => array('marks' => array()),
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function mark_menu() {
+  $items['mark/%mark/%/%'] = array(
+    'title' => t('Mark'),
+    'page callback' => 'mark_vote',
+    'page arguments' => array(1,2,3),
+    'access arguments' => array('mark items'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/settings/mark'] = array(
+    'title' => t('Mark'),
+    'description' => t('Allows readers to mark items'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mark_settings_form'),
+    'access arguments' => array('administer mark'),
+    'file' => 'mark.admin.inc'
+  );
+  $items['admin/settings/mark/%mark'] = array(
+    'title' => t('Edit mark'),
+    'description' => t('Edit a mark'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mark_edit_form', 3),
+    'access arguments' => array('administer mark'),
+    'type' => MENU_CALLBACK,
+    'file' => 'mark.admin.inc'
+  );
+  $items['admin/settings/mark/%mark/delete'] = array(
+    'title' => t('Delete'),
+    'description' => t('Delete a mark'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mark_delete_form', 3 ),
+    'access callback' => 'mark_task_access',
+    'access arguments' => array(3, 'delete'),
+    'type' => MENU_CALLBACK,
+    'file' => 'mark.admin.inc'
+  );
+  $items['admin/settings/mark/%mark/revert'] = array(
+    'title' => t('Revert'),
+    'description' => t('Revert a mark'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mark_delete_form', 3 ),
+    'access callback' => 'mark_task_access',
+    'access arguments' => array(3, 'revert'),
+    'type' => MENU_CALLBACK,
+    'file' => 'mark.admin.inc'
+  );
+  $items['admin/settings/mark/%mark/disable'] = array(
+    'title' => t('Disable'),
+    'description' => t('Disable a mark'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mark_status_form', 3),
+    'access callback' => 'mark_task_access',
+    'access arguments' => array(3, 'disable'),
+    'type' => MENU_CALLBACK,
+    'file' => 'mark.admin.inc'
+  );
+  $items['admin/settings/mark/%mark/enable'] = array(
+    'title' => t('Enable'),
+    'description' => t('Enable a mark'),
+    'page callback' => 'drupal_status_form',
+    'page arguments' => array('mark_status_form', 3),
+    'access callback' => 'mark_task_access',
+    'access arguments' => array(3, 'enable'),
+    'type' => MENU_CALLBACK,
+    'file' => 'mark.admin.inc'
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_view_api().
+ */
+function mark_views_api() {
+  return array('api' => 2);
+}
+
+/**
+ * Implementation of hook_votingapi_metadata_alter().
+ */
+function mark_votingapi_metadata_alter(&$data) {
+  $data['value_types']['mark'] = array(
+    'name' => t('Mark'),
+    'description' => t('User marks on content.'),
+  );
+  foreach (mark_load() as $name => $mark) {
+    // Don't disturb existing tags.
+    if (!isset($data['tags'][$name])) {
+      $data['tags'][$name] = array(
+        'name' => $mark->name,
+        'description' => $mark->title,
+      );
+    }
+  }
+}
+
+/**
+ * Implementation of hook_votingapi_relationships().
+ */
+function mark_votingapi_relationships() {
+  // Ignore relationships already provided by votingapi
+  $ignore = array('node', 'comment', 'user');
+
+  module_load_include('inc', 'views', 'includes/admin');
+  $relationships = array();
+  foreach (views_fetch_base_tables() as $table => $info) {
+    if (!in_array($table, $ignore)) {
+      $marks = mark_load($table, 'tables');
+      if (!empty($marks)) {
+        $data = views_fetch_data($table);
+        $relationships[] = array(
+          'description' => $info['title'],
+          'content_type' => $table,
+          'base_table' => $table,
+          'content_id_column' => $data['table']['base']['field'],
+        );
+      }
+    }
+  }
+  return $relationships;
+}
+
+/**
+ * Implementation of hook_votingapi_results_alter().
+ */
+function mark_votingapi_results_alter(&$results, $content_type, $content_id) {
+  $cache = db_query("SELECT v.content_id, COUNT(v.value) AS count FROM {votingapi_vote} v
+    WHERE v.tag ='flag' AND v.content_id = %d AND v.content_type = '%s'
+    GROUP BY v.content_id", $content_id, $content_type);
+
+  while ($result = db_fetch_array($cache)) {
+    $results['flag']['mark']['count'] = $result['count'];
+  }
+}
+
+/**
+ * Implementation of hook_block()
+ */
+function mark_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ($op) {
+    case 'list':
+      return array (
+        'node' => array('info' => t('Mark a node')),
+        'user' => array('info' => t('Mark a user')),
+      );
+      break;
+    case 'view':
+      if (($object = menu_get_object($delta)) && user_access('mark items')) {
+        $names = variable_get("mark_block_$delta", array());
+        $links = array();
+        foreach ($names as $name) {
+          $links[$name] = array(
+            'mark' => mark_load($name),
+            'votingapi' => array(
+              'content_type' => $delta,
+              'content_id' => ($delta == 'node' ? $object->nid : $object->uid),
+              'value_type' => 'mark',
+              'value' => 1,
+              'tag' => $name,
+            ),
+          );
+        }
+        return array(
+          'subject' => (count($links) == 1) ? $links[$name]['mark']->settings['title'] : t('Mark this'),
+          'content' => theme('mark_link', $links),
+        );
+      }
+      break;
+    case 'configure':
+      $form = array();
+      $marks = mark_load($delta, 'tables');
+      if ($marks) {
+        foreach ($marks as $mark) {
+          $options[$mark->name] = empty($mark->settings['title']) ? $mark->name : $mark->settings['title'];
+        }
+        $form['marks'] = array(
+          '#type' => 'checkboxes',
+          '#title' => t('Enable marks'),
+          '#description' => t('Checked marks will be made available to users in via this block'),
+          '#options' => $options,
+          '#default_value' => variable_get("mark_block_$delta", array()),
+        );
+        return $form;
+      }
+      break;
+    case 'save':
+      variable_set("mark_block_$delta", array_filter($edit['marks']));
+      break;
+  }
+}
+
+/**
+ * Load marks.
+ *
+ * param $name
+ *   Optional. The id to lookup
+ * param $lookup
+ *   Optional. The type of lookup to do, either 'names' or 'tables'.
+ * param $reset
+ *   Optional. Whether to reset the static cache or not, defaults to false.
+ */
+function mark_load($name = NULL, $lookup = 'names', $reset = FALSE) {
+  ctools_include('export');
+  static $marks;
+  if (!isset($marks) || $reset) {
+    ctools_export_load_object_reset('mark');
+    $marks = array('names' => array(), 'types' => array());
+    $marks['names'] = ctools_export_load_object('mark', 'all');
+    foreach ($marks['names'] as $k => $v) {
+      // Translate strings in exported mark definitions.
+      if ($v->export_type == EXPORT_IN_CODE) {
+        foreach (array('mark_text', 'mark_confirm_text', 'unmark_text', 'unmark_confirm_text') as $setting) {
+          $v->settings[$setting] = t($v->settings[$setting]);
+        }
+      }
+
+      // Ensure defaults are populated.
+      if (empty($v->settings['title'])) {
+        $marks['names'][$k]->settings['title'] =  $k;
+      }
+      if (empty($v->settings['mark_text'])) {
+        $marks['names'][$k]->settings['mark_text'] = t('Mark');
+      }
+      if (empty($v->settings['mark_confirm_text'])) {
+        $marks['names'][$k]->settings['mark_confirm_text'] =  t('Mark set');
+      }
+      if (empty($v->settings['unmark_text'])) {
+        $marks['names'][$k]->settings['unmark_text'] =  t('Remove mark');
+      }
+      if (empty($v->settings['unmark_confirm_text'])) {
+        $marks['names'][$k]->settings['unmark_confirm_text'] =  t('Mark removed');
+      }
+
+      // populate tables array.
+      $marks['tables'][$v->basetable][$k] = &$marks['names'][$k];
+    }
+  }
+  if (isset($name)) {
+    return isset($marks[$lookup][$name]) ? $marks[$lookup][$name] : FALSE;
+  }
+  return $marks['names'];
+}
+
+/**
+ * See if a users has set a mark.
+ * 
+ * param $name
+ *  The Mark name
+ * param $content_type
+ *  The type of item; ie 'node'
+ * param $content_id
+ *  The id of the item
+ * param $uid
+ *  Optional. The uid to look for
+ */
+function mark_is_set($name, $content_type, $content_id, $uid = false) {
+  $criteria = array(
+    'content_type' => $content_type,
+    'content_id' => $content_id,
+    'value_type' => 'mark',
+    'tag' => $name,
+  );
+
+  $mark = mark_load($name);
+  if (!$mark->settings['global']) {
+    if (!$uid) {
+      global $user;
+      $uid = $user->uid;
+    }
+    $criteria['uid'] = $uid;
+  }
+
+  $results = votingapi_select_votes($criteria);
+  return count($results);
+}
+
+/**
+ * Menu access callback for various tasks.
+ */
+function mark_task_access($mark, $op) {
+  if (!user_access('administer mark')) {
+    return FALSE;
+  }
+  switch ($op) {
+    case 'revert':
+      return ($mark->export_type & EXPORT_IN_DATABASE) && ($mark->export_type & EXPORT_IN_CODE);
+    case 'delete':
+      return ($mark->export_type & EXPORT_IN_DATABASE) && !($mark->export_type & EXPORT_IN_CODE);
+    case 'disable':
+      return ($mark->export_type & EXPORT_IN_CODE) && empty($mark->disabled);
+    case 'enable':
+      return ($mark->export_type & EXPORT_IN_CODE) && !empty($mark->disabled);
+  }
+  return TRUE;
+}
+
+/**
+ * Record a vote, handles both POST submissions and the GET fallback.
+ *
+ * param $mark
+ *   The mark being recorded
+ * param $content_type
+ *   The type of item being marked; ie 'node'
+ * param $content_id
+ *   The id of the item.
+ */
+function mark_vote($mark, $content_type, $content_id) {
+  if (empty($_POST['token'])) {
+    if (drupal_valid_token($_GET['token'], $content_type .'/'. $content_id)) {
+      return drupal_get_form('mark_vote_confirm', $mark, $content_type, $content_id);
+    }
+  }
+  else {
+    if (drupal_valid_token($_POST['token'], $content_type .'/'. $content_id)) {
+      $criteria = array(
+        'content_type' => $content_type,
+        'content_id' => $content_id,
+        'value_type' => 'mark',
+        'value' => 1,
+        'tag' => $mark->name,
+      );
+
+      if (mark_is_set($mark->name, $content_type, $content_id)) {
+        if (!$mark->settings['global']) {
+          global $user;
+          $criteria['uid'] = $user->uid;
+        }
+        $votes = array();
+        votingapi_set_votes($votes, $criteria);
+        // Because Voting API doesn't recalculate when it clears old votes we
+        // have to do it here.
+        votingapi_recalculate_results($content_type, $content_id);
+        $msg = $mark->settings['unmark_confirm_text'];
+      }
+      else {
+        $votes = array($criteria);
+        votingapi_set_votes($votes);
+        $msg = $mark->settings['mark_confirm_text'];
+      }
+      return drupal_json(array(
+        'markup' => theme('mark_link', array($mark->name => array(
+          'mark' => $mark,
+          'votingapi' => $criteria,
+        ))),
+        'message' => $msg,
+      ));
+    }
+  }
+  watchdog('mark', 'Voting form error: Invalid token.');
+  return drupal_access_denied();
+}
+
+/**
+ * Confirm form for non-ajax fallback.
+ */
+function mark_vote_confirm($form_state, $mark, $content_type, $content_id) {
+  $form = array();
+  $form['mark'] = array('#type' => 'value', '#value' => $mark);
+  $form['content_type'] = array('#type' => 'value', '#value' => $content_type);
+  $form['content_id'] = array('#type' => 'value', '#value' => $content_id);
+  $form[] = array('#value' => '<p>'. t('Are you sure you want to proceed?') .'</p>');
+  if (mark_is_set($mark->name, $content_type, $content_id)) {
+    $form['action'] = array('#type' => 'value', '#value' => 'unmark');
+    $form['submit'] = array('#type'=> 'submit', '#value' => $mark->settings['unmark_text']);
+  }
+  else {
+    $form['action'] = array('#type' => 'value', '#value' => 'mark');
+    $form['submit'] = array('#type'=> 'submit', '#value' => $mark->settings['mark_text']);
+  }
+  return $form;
+}
+
+/**
+ * Submission handler for vote confirmation.
+ */
+function mark_vote_confirm_submit($form, $form_state) {
+  $vals = $form_state['values'];
+  $criteria = array(
+    'content_type' => $vals['content_type'],
+    'content_id' => $vals['content_id'],
+    'value_type' => 'mark',
+    'value' => 1,
+    'tag' => $vals['mark']->name,
+  );
+
+  if ($form_state['values']['action'] == 'unmark') {
+    $votes = array();
+    votingapi_set_votes($votes, $criteria);
+    drupal_set_message($vals['mark']->settings['unmark_confirm_text']);
+  }
+  else {
+    $votes = array($criteria);
+    votingapi_set_votes($votes);
+    drupal_set_message($vals['mark']->settings['mark_confirm_text']);
+  }
+}
+
+/**
+ * Theme function for mark listing page.
+ */
+function theme_mark_listing_form($form) {
+  $header = array(t('Name'), t('table'), t('Operations'));
+  $rows = array();
+  foreach ($form['marks']['#value'] as $mark) {
+    // Mark actions
+    $links = array(
+      'edit'    => l(t('Edit'), "admin/settings/mark/{$mark->name}"),
+      'delete'  => l(t('Delete'), "admin/settings/mark/{$mark->name}/delete"),
+      'revert'  => l(t('Revert'), "admin/settings/mark/{$mark->name}/revert"),
+      'disable' => l(t('Disable'), "admin/settings/mark/{$mark->name}/disable"),
+      'enable'  => l(t('Enable'), "admin/settings/mark/{$mark->name}/enable"),
+    );
+    foreach (array_keys($links) as $key) {
+      if (!mark_task_access($mark, $key)) {
+        unset($links[$key]);
+      }
+    }
+
+    $rows[] = array(
+      $mark->name,
+      $mark->basetable,
+      implode(' | ', $links),   
+    );
+  }
+  unset($form['marks']);
+  $o = theme('table', $header, $rows);
+  return $o . drupal_render($form);
+}
+
+/**
+ * Preprocess for mark link generation
+ */
+function template_preprocess_mark_link(&$vars) {
+  drupal_add_js(drupal_get_path('module', 'mark') . '/mark.js');
+
+  $vars['links'] = array();
+  foreach ($vars['marks'] as $k => $v) {
+    $link = new stdClass();
+    if (mark_is_set($v['mark']->name, $v['votingapi']['content_type'], $v['votingapi']['content_id'])) {
+      $link->title = $v['mark']->settings['unmark_text'];
+      $link->marked = true;
+    }
+    else {
+      $link->title = $v['mark']->settings['mark_text'];
+      $link->marked = false;
+    }
+    $link->path = "mark/$k/". $v['votingapi']['content_type'] .'/'. $v['votingapi']['content_id'];
+    $link->options = array('query' => array(
+      'destination' => $_GET['q'],
+      'token' => drupal_get_token($v['votingapi']['content_type'] .'/'.  $v['votingapi']['content_id']),
+    ));
+    $vars['links'][$k] = $link;
+  }
+}

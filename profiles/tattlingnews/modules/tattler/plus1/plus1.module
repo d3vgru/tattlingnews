@@ -1,0 +1,680 @@
+<?php
+// $Id: plus1.module,v 1.1.4.11 2011/01/14 15:28:04 nancyw Exp $
+
+/**
+ * @file
+ * A simple +1 voting widget module.
+ */
+
+/**
+ * Modules should return this value from hook_plus1_access() to allow access to voting on a node.
+ */
+define('PLUS1_ACCESS_ALLOW', 'allow');
+
+/**
+ * Modules should return this value from hook_plus1_access() to deny access to voting on a node.
+ */
+define('PLUS1_ACCESS_DENY', 'deny');
+
+/**
+ * Modules should return this value from hook_plus1_access() to not affect access to voting on a node.
+ */
+define('PLUS1_ACCESS_IGNORE', NULL);
+
+/**
+ * This value allows one to alter the Plus 1 votingapi tag.
+ */
+define('PLUS1_VOTE_TAG', 'vote');
+
+/**
+ * Implements hook_perm().
+ */
+function plus1_perm() {
+  return array('vote on content', 'administer the voting widget');
+}
+
+/**
+ * Implements hook_menu().
+ */
+function plus1_menu() {
+  $items = array();
+
+  $items['plus1/vote/%'] = array(
+    'title' => t('Vote'),
+    'page callback' => 'plus1_vote',
+    'page arguments' => array(2),
+    'access arguments' => array('vote on content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/settings/plus1'] = array(
+    'title' => t('Plus 1'),
+    'description' => t('Allows readers to vote on content.'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('plus1_settings'),
+    'access arguments' => array('administer the voting widget'),
+    'file' => 'plus1.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function plus1_theme() {
+  return array(
+    'plus1_widget' => array(
+      'arguments' => array(
+        'node',
+        'score' => 0,
+        'logged_in' => FALSE,
+        'is_author' => FALSE,
+        'voted' => FALSE,
+        'teaser' => FALSE,
+        'page' => TRUE,
+        ),
+    ),
+  );
+}
+
+/**
+ * Page callback.
+ * @param $nid
+ * A node ID.
+ * @param $ajax
+ * Equal to 'json' when the function is called by jQuery.
+ * Submits the vote request and refreshes the page without JavaScript.
+ * Otherwise, it submits the vote request and returns JSON to be parsed by jQuery.
+ */
+function plus1_vote($nid) {
+  global $user;
+  $json = isset($_GET['json']) ? 'json' : NULL;
+
+  // TRUE means to not worry about anonymous users.
+  if (!drupal_valid_token($_GET['token'], $nid, TRUE)) {
+    watchdog('Plus1', 'Voting form error: Invalid token.');
+    return drupal_access_denied();
+  }
+
+  $node = node_load($nid);
+
+  if (plus1_vote_access('create', $node, $user)) {
+    $criteria = array(
+      array(
+        'content_id' => $nid,
+        'value_type' => 'points',
+        'value' => 1,
+        'tag' => PLUS1_VOTE_TAG,
+      ));
+    votingapi_set_votes($criteria);
+
+    $criteria = array(
+      'content_id' => $nid,
+      'function' => 'sum',
+      'tag' => PLUS1_VOTE_TAG,
+    );
+    $results = votingapi_select_results($criteria);
+
+    if ($json == 'json') {
+      // This print statement will return results to jQuery's request.
+      print drupal_json(array('score' => $results[0]['value'], 'voted' => check_plain(variable_get('plus1_you_voted', t('You voted')))));
+    }
+    else {
+      // Go to the full node view.
+      if ($after_vote = variable_get('plus1_after_vote_text', 'Thank you for your vote.')) {
+        drupal_set_message(t($after_vote));
+      }
+
+//      $path = "node/$nid";
+//      if (isset($_REQUEST['destination'])) {
+//        $path = $_REQUEST['destination'];
+//      }
+
+      drupal_goto("node/$nid");
+    }
+  }
+}
+
+/**
+ * Return the number of votes for a given node ID/user ID pair.
+ *
+ * @param $nid
+ * A node ID.
+ * @param $uid
+ * A user ID.
+ * @return Integer
+ * Number of votes the user has cast on this node.
+ */
+function plus1_get_votes($nid, $uid) {
+  $criteria = array(
+    'content_id' => $nid,
+    'value_type' => 'points',
+    'tag' => PLUS1_VOTE_TAG,
+    );
+  if ($uid == 0) {
+    $criteria['vote_source'] = ip_address();
+  }
+  else {
+    $criteria['uid'] = $uid;
+  }
+  $results = votingapi_select_votes($criteria);
+  return count($results);
+}
+
+/**
+ * Return the total score of a node.
+ *
+ * @param $nid
+ * A node ID.
+ * @return Integer
+ * The score.
+ */
+function plus1_get_score($nid) {
+  $criteria = array(
+    'content_id' => $nid,
+    'value_type' => 'points',
+    'function' => 'sum',
+    'tag' => PLUS1_VOTE_TAG,
+    );
+  $results = votingapi_select_results($criteria);
+  if (empty($results)) {
+    return 0;
+  }
+  else {
+    return $results[0]['value'];
+  }
+}
+
+/**
+ * Create voting widget to display on the webpage.
+ */
+function plus1_jquery_widget($node, $teaser, $page) {
+  // If voting is disabled on this node, just go away.
+  if ($node->plus1_disable_vote) {
+    return NULL;
+  }
+
+  $score = plus1_get_score($node->nid);
+  global $user;
+  // If user is not logged-in.
+  if ($user->uid == 0) {
+    $logged_in = FALSE;
+    $is_author = FALSE;
+  }
+  else {
+    $logged_in = TRUE;
+    $is_author = ($node->uid == $user->uid)? TRUE : FALSE;
+  }
+  $voted = plus1_get_votes($node->nid, $user->uid);
+
+  // If a user wishes to, they may provide a different theme function
+  // for each content type.
+  return theme(array($node->type . '_plus1_widget', 'plus1_widget'),
+    $node, $score, $logged_in, $is_author, $voted, $teaser, $page);
+}
+
+/**
+ * Check that an item being voted upon is a valid vote.
+ *
+ * @param $type
+ *   Type of target (currently only node is supported).
+ * @param $id
+ *   Identifier within the type (in this case nid).
+ * @param $account
+ *   The user trying to cast the vote.
+ *
+ * @return boolean to allow vote.
+ */
+function plus1_vote_access($op, $node, $account = NULL) {
+  global $user;
+
+  if (!$node || !in_array($op, array('view', 'create'), TRUE)) {
+    // If there was no node to check against, or the $op was not one of the
+    // supported ones, we return access denied.
+    return FALSE;
+  }
+  // If no user object is supplied, the access check is for the current user.
+  if (empty($account)) {
+    $account = $user;
+  }
+
+  $vote_allow = TRUE;
+
+  foreach (module_implements('plus1_access') as $module) {
+    $status = module_invoke($module, 'plus1_access', $node, 'view', $user);
+    if ($status === PLUS1_ACCESS_ALLOW) {
+      break;
+    }
+    elseif ($status === PLUS1_ACCESS_DENY) {
+      $vote_allow = FALSE;
+      break;
+    }
+  }
+
+  return $vote_allow;
+}
+
+/**
+ * Implementation of hook_plus1_access().
+ */
+function plus1_plus1_access($node, $op, $account) {
+  // Only show widget on selected node types
+  if (!in_array($node->type, variable_get('plus1_nodetypes', array()))) {
+    return PLUS1_ACCESS_DENY;
+  }
+
+  // If the node voting is disabled, deny.
+  if ($node->plus1_disable_vote) {
+    return PLUS1_ACCESS_DENY;
+  }
+
+  // If the user has already voted - don't let another vote be registered
+  if ($op == 'vote' && plus1_get_votes($node->nid, $account->uid)) {
+    return PLUS1_ACCESS_DENY;
+  }
+
+  return PLUS1_ACCESS_IGNORE;
+}
+
+/**
+ * Implements hook_nodeapi().
+ */
+function plus1_nodeapi(&$node, $op, $teaser, $page) {
+  switch ($op) {
+    case 'view':
+      // If the build_mode is one of these, bail out now.
+      $exclude_modes = array(
+        NODE_BUILD_PREVIEW,
+        NODE_BUILD_SEARCH_INDEX,
+        NODE_BUILD_SEARCH_RESULT,
+        NODE_BUILD_RSS,
+        );
+      if (in_array($node->build_mode, $exclude_modes)) {
+        return;
+      }
+
+      // Only show the voting widget if voting here is allowed.
+      if (plus1_vote_access('view', $node)) {
+        drupal_add_css(drupal_get_path('module', 'plus1') . '/plus1.css');
+        // Show the widget.
+        if (($teaser && variable_get('plus1_in_teaser', 0))
+          || (!$teaser && variable_get('plus1_in_full_view', 1))) {
+          $node->content['plus1_widget'] = array(
+            '#value' => plus1_jquery_widget($node, $teaser, $page),
+            '#weight' => (int) variable_get('plus1_weight', '100'),
+          );
+        }
+      }
+      return;
+
+    case 'delete':
+      // Remove "disable vote".
+      $skip = variable_get('plus1_disable_vote', array());
+      if (isset($skip[$node->nid])) {
+        unset($skip[$node->nid]);
+        variable_set('plus1_disable_vote', $skip);
+      }
+
+      // Delete votes and results when node is deleted.
+      if (variable_get('plus1_delete_nodes', 1)) {
+        $criteria = array('content_id' => $node->nid);
+        $votes = votingapi_select_votes($criteria);
+        if ($votes) {
+          votingapi_delete_votes($votes);
+
+          $result = votingapi_select_results($criteria);
+          votingapi_delete_results($result);
+
+          // Create notices.
+          global $user;
+          $c = count($votes);
+          drupal_set_message(t('!count votes cleared.', array('!count' => $c)));
+          watchdog('plus1', '!count votes deleted for @title (!nid) by user !uid.', array('!count' => $c, '@title' => $node->title, '!nid' => $node->nid, '!uid' => $user->uid));
+        }
+      }
+      return;
+
+    // On node_load, add the disable flag.
+    case 'load':
+      $skip = variable_get('plus1_disable_vote', array());
+      return array('plus1_disable_vote' => isset($skip[$node->nid]));
+
+    case 'update':
+    case 'insert':
+      drupal_set_message();
+      $skip = variable_get('plus1_disable_vote', array());
+      // Is this node disabled?
+      $set = isset($skip[$node->nid]);
+
+      // Do they want to disable voting?
+      if ($node->plus1_disable_vote) {
+        // See if it is aleady disabled.
+        if (!$set) {
+          $skip[$node->nid] = $node->nid;
+          variable_set('plus1_disable_vote', $skip);
+          drupal_set_message(t('Voting on this post is disabled.'));
+        }
+      }
+      else {
+        // Don't disable, so see if it was set before.
+        if ($set) {
+          unset($skip[$node->nid]);
+          variable_set('plus1_disable_vote', $skip);
+          drupal_set_message(t('Voting on this post is enabled.'));
+        }
+      }
+      return;
+  }
+}
+
+/**
+ * Theme for the voting widget.
+ *
+ * You are free to load your own CSS and JavaScript files in your
+ * theming function override, instead of the ones provided by default.
+ *
+ * This function adds information to the Drupal.settings.plus1 JS object,
+ * concerning class names used for the voting widget.
+ * If you override this theming function but choose to use the
+ * default JavaScript file, simply assign different values to
+ * the following variables:
+ *    $widget_class   (The wrapper element for the voting widget.)
+ *    $vote_class     (The anchor element to cast a vote.)
+ *    $message_class  (The wrapper element for the anchor element.
+ *                     May contain feedback when the vote has been cast.)
+ *    $score_class    (The placeholder element for the score.)
+ * The JavaScript looks for these CSS hooks to
+ * update the voting widget after a vote is cast.
+ * Of course you may choose to write your own JavaScript.
+ * The JavaScript adds presentation, ie: fade in.
+ *
+ */
+function theme_plus1_widget($node, $score = 0, $logged_in = FALSE, $is_author = FALSE, $voted = FALSE, $teaser = FALSE, $page = TRUE) {
+  static $javascript_added = FALSE;
+
+  // Defining CSS hooks to be used in the JavaScript.
+  $widget_class = check_plain(variable_get('plus1_widget_class', 'plus1-widget'));
+  $link_class = check_plain(variable_get('plus1_link_class', 'plus1-link'));
+  $message_class = check_plain(variable_get('plus1_msg_class', 'plus1-msg'));
+  $score_class = check_plain(variable_get('plus1_score_class', 'plus1-score'));
+  $vote_class = 'plus1-vote-class';  // Is this used any more?
+
+  if (!$javascript_added) {
+    // Load the JavaScript and CSS files.
+    // You are free to load your own JavaScript files in your theming function to override.
+    drupal_add_js(drupal_get_path('module', 'plus1') . '/jquery.plus1.js');
+    drupal_add_css(drupal_get_path('module', 'plus1') . '/plus1.css');
+
+    // Attaching these hooks names to the Drupal.settings.plus1 JavaScript object.
+    // So these class names are NOT hard-coded in the JavaScript.
+    drupal_add_js(array('plus1' => array('widget_class' => $widget_class, 'vote_class' => $vote_class, 'message_class' => $message_class, 'score_class' => $score_class)), 'setting');
+
+    $javascript_added = TRUE;
+  }
+
+  // And now we output the HTML.
+  $output_content = '';
+  if (!$logged_in && !user_access('vote on content')) {
+    if ($login_text = variable_get('plus1_login_to_vote', 'Log in to vote')) {
+      $output_content .= l(t($login_text), 'user', array('html' => TRUE, 'query' => drupal_get_destination()));
+     }
+  }
+  elseif ($voted) { // User already voted.
+    if ($voted_text = variable_get('plus1_you_voted', 'You voted')) {
+      $output_content .= check_plain(t(filter_xss_admin($voted_text)));
+    }
+  }
+  elseif (user_access('vote on content')) {
+    // Is this the user's own content and do we allow them to vote on it?
+    if ($is_author && variable_get('plus1_vote_on_own', 1)) {
+      if ($vote_text = variable_get('plus1_vote', 'Vote')) {
+        // User is eligible to vote.
+        // The class name provided by Drupal.settings.plus1.vote_class what
+        // we will search for in our jQuery later.
+        $output_content .= '<form class="' . $vote_class . '" action="'
+          . url("plus1/vote/$node->nid",
+            array('query' => 'token=' . drupal_get_token($node->nid) . '&' . drupal_get_destination()))
+          . '" method="post"><div>';
+
+        $output_content .= '<button type="submit"><span>' . t(filter_xss_admin($vote_text)) . '</span></button>';
+
+        $author_text = variable_get('plus1_author_text', 'Your content');
+        if ($author_text) {
+          $output_content .= '<div class="plus1-author-text">' . t(filter_xss_admin($author_text)) . '</div>';
+        }
+
+        $output_content .= '</div></form>';
+      }
+    }
+  }
+
+  if ($output_content) {
+    $output_content = '<div class="' . $message_class . '">' . $output_content . '</div>';
+  }
+
+  $output = '<div class="' . $widget_class . '">';
+  $output .= '<div class="' . $score_class . '">' . $score . '</div>';
+  $output .= $output_content;
+  $output .= '</div>';
+  return $output;
+}
+
+/**
+* Implementation of hook_link().
+*/
+function plus1_link($type, $object, $teaser = FALSE) {
+  $links = array();
+
+  if ($type == 'node') {
+    // Has the summary link been enabled?
+    // And skip if voting is disabled.
+    if (variable_get('plus1_show_link', 0) && !$object->plus1_disable_vote) {
+      $score = plus1_get_score($object->nid);
+      $score_class = variable_get('plus1_link_count', 'plus1-link-count');
+      $score_text = "<span class=\"$score_class\">$score</span>";
+      $singular = t(variable_get('plus1_link_singular', t('Vote')));
+      $plural = t(variable_get('plus1_link_plural', t('Votes')));
+      $title = format_plural($score, $singular, $plural, array('!score' => $score));
+      $links['plus1'] = array(
+        'title' => $title,
+        'html' => TRUE,
+        'attributes' => array('title' => $score ? $title : t('Be the first to @vote', array('@vote' => variable_get('plus1_vote', 'Vote')))),
+        );
+    }
+  }
+
+  return $links;
+}
+
+/**
+ * Implements hook_block();
+ */
+function plus1_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ($op) {
+    case 'list':
+      return plus1_block_list();
+
+    case 'view':
+      return plus1_block_view($delta);
+
+    case 'configure':
+      return plus1_block_configure($delta);
+
+    case 'save':
+      return plus1_block_save($delta, $edit);
+  }
+}
+
+/**
+ * Function for plus1_block(op = 'list').
+ */
+function plus1_block_list() {
+  return array(
+    'most_votes' => array('info' => t('Plus1 Most Votes'), 'cache' => BLOCK_NO_CACHE),
+    'vote_for_this' => array('info' => t('Plus1 Vote for This Post'), 'cache' => BLOCK_NO_CACHE),
+    );
+}
+
+/**
+ * Function for plus1_block(op = 'view').
+ */
+function plus1_block_view($delta = 0) {
+  $block = array();
+  drupal_add_css(drupal_get_path('module', 'plus1') . '/plus1.css');
+
+  switch ($delta) {
+    case 'most_votes':
+      $limit = variable_get('plus1_most_votes_block_items', 5);
+      $query = "SELECT n.nid, n.title, vc.value AS votes "
+        . "FROM votingapi_cache vc "
+        . "INNER JOIN node n ON n.nid=vc.content_id "
+        . "WHERE vc.content_type = 'node' "
+        . "AND vc.value_type = 'points' "
+        . "AND vc.tag = '%s' "
+        . "AND vc.function = 'sum' "
+        . "ORDER BY votes DESC "
+        ;
+      $result = db_query_range($query, PLUS1_VOTE_TAG, 0, $limit);
+      $items = array();
+      while ($row = db_fetch_object($result)) {
+        $items[] = l($row->title, "node/$row->nid") . " ($row->votes)";
+      }
+
+      $block['content'] = theme('item_list', $items);
+      break;
+
+    case 'vote_for_this':
+      // plus1_access
+
+      if (user_access('vote on content')) {
+        global $user;
+        // If this is a node, then show the widget.
+        $node = menu_get_object('node');
+        if ($node && plus1_vote_access('view', $node)) {
+          $criteria = array(
+            'content_id' => $node->nid,
+            'value_type' => 'points',
+            'tag' => PLUS1_VOTE_TAG,
+            );
+
+          $score = count(votingapi_select_votes($criteria));
+
+          if ($user->uid == 0) {
+            $criteria['vote_source'] = ip_address();
+          }
+          else {
+            $criteria['uid'] = $user->uid;
+          }
+          $voted = count(votingapi_select_votes($criteria));
+
+          $block['content'] = theme(array($node->type . '_plus1_widget', 'plus1_widget'),
+            $node, $score, $user->uid, $node->uid == $user->uid, $voted, FALSE, TRUE);
+        }
+      }
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Function for plus1_block(op = 'configure').
+ */
+function plus1_block_configure($delta = 0) {
+  $form = array();
+
+  switch ($delta) {
+    case 'most_votes':
+      $form['items'] = array(
+        '#type' => 'radios',
+        '#title' => t('Number of items to show'),
+        '#default_value' => variable_get('plus1_most_votes_block_items', 5),
+        '#options' => drupal_map_assoc(array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 40, 50)),
+        '#attributes' => array('class' => 'container-inline'),
+        );
+      break;
+
+//    case 'vote_for_this':
+//      drupal_set_message('What should I configure?', 'warning');
+//      break;
+  }
+
+  return $form;
+}
+
+/**
+ * Function for plus1_block(op = 'save').
+ */
+function plus1_block_save($delta = 0, $edit = array()) {
+  switch ($delta) {
+    case 'most_votes':
+      variable_set('plus1_most_votes_block_items', $edit['items']);
+      return;
+
+//    case 'vote_for_this':
+//      drupal_set_message('What should I save?', 'warning');
+//      return;
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ * Add individual node vote disabling.
+ */
+function plus1_form_alter(&$form, $form_state, $form_id) {
+  if (variable_get('plus1_allow_disable', 0)) {
+    if (isset($form['type']) && isset($form['#node']) && substr($form_id, -10) == '_node_form') {
+      if (in_array($form['type']['#value'], variable_get('plus1_nodetypes', array()))) {
+        $noyes = array(t('No'), t('Yes'));
+
+        $form['plus1_voting'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('Plus 1 Voting'),
+          '#collapsible' => TRUE,
+          '#collapsed' => TRUE,
+          );
+
+        // Get list of nodes that are disabled.
+        $skip = variable_get('plus1_disable_vote', array());
+        $disabled = empty($form['nid']['#value']) ? FALSE : isset($skip[$form['nid']['#value']]);
+
+        // Note that this will be handled in hook_nodeapi where we have a
+        // nid for new nodes.
+        $form['plus1_voting']['plus1_disable_vote'] = array(
+          '#type' => 'radios',
+          '#options' => $noyes,
+          '#title' => t('Disable voting on this post'),
+          '#default_value' => (int) $disabled,
+          '#description' => t('Note that "No" means voting is allowed. "Yes" means that it is not allowed for <strong>this</strong> post.'),
+          '#attributes' => array('class' => 'container-inline'),
+          );
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_user().
+ * Delete votes for deleted users.
+ */
+function plus1_user($op, &$edit, &$account, $category = NULL) {
+  if ($op == 'delete' && variable_get('plus1_delete_users', 1)) {
+    $criteria = array('uid' => $account->uid);
+    $votes = votingapi_select_votes($criteria);
+    if ($votes) {
+      votingapi_delete_votes($votes);
+
+      // Now call for the results to be recalculated.
+      foreach ($votes as $vote) {
+        // Leave last param as FALSE to let the recalc be done by cron,
+        // if we are using that method.
+        votingapi_recalculate_results($vote['content_type'], $vote['content_id'], FALSE);
+      }
+
+      $c = count($votes);
+      drupal_set_message(t('!count votes cleared.', array('!count' => $c)));
+      watchdog('plus1', '!count votes deleted for user !uid (@name).', array('!count' => $c, '!uid' => $account->uid, '@name' => $account->name));
+    }
+  }
+}

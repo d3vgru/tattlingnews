@@ -1,0 +1,1470 @@
+<?php
+
+define('TTLR_USER_TERMS_VID', variable_get('tattler_user_terms_vid', -1));
+define('TTLR_TOPIC_TERMS_VID', variable_get('tattler_topic_terms_vid', -1));
+
+/** It's a good idea to turn this off during development **/
+define('TATTLER_DISPLAY_FAVICONS', variable_get('tattler_display_favicons', TRUE));
+
+// Tattler is too large to be "notice" compliant. It's really unnecessary.
+error_reporting(E_ALL ^ E_NOTICE);
+
+
+function tattlerui_get_remote_length($url) {
+  if (($fp = @fopen($url, 'r'))) {
+    $meta = stream_get_meta_data($fp);
+    //echo "<pre>".print_r ( $meta,true)."</pre>";
+    foreach ($meta['wrapper_data'] as $item) {
+      if (strpos($item, 'Content-Length:') !== FALSE) {
+        //echo "<pre>".print_r ( $item,true)."</pre>";
+        $size = str_replace('Content-Length:', '', $item);
+        $size = trim($size);
+        $size = (int) $size;
+        return $size;
+      }
+    }
+  }  
+  
+  return -1; // Unable to detect.
+}
+
+/**
+ * Implementation of hook_init().
+ *
+ * Loads some javascript that will be present on (nearly) every page.
+ */
+function tattlerui_init() {   
+  
+//  error_log ('----------------' . date('H:i', time()));
+//  variable_del('cron_semaphore'); //clear semaphore
+  
+  
+  //-- Prevent Drupal cron from hanging for an hour
+  $semaphore = variable_get('cron_semaphore', 0);
+  if (!empty($semaphore)) {
+    $grace_period = 5 * 60; // Make sure cron is not just running, right now. Give it 5 minutes.
+    if ((time() - $semaphore) > $grace_period) {
+      variable_del('cron_semaphore'); //clear semaphore
+    }
+  }
+
+  if (arg(0)=='admin') { //prettify admin forms
+    $mpath = drupal_get_path('module', 'tattlerui');
+    drupal_add_css ( $mpath . '/tattler.setting.forms.css');
+  
+  }
+  
+  //make sure it is loaded  
+  drupal_add_js('misc/autocomplete.js');
+  
+  tattlerui_plus1_js();
+  tattlerui_init_javascript_variables();
+  
+  //Do NOT load extra javascript on node edit forms!!!
+  if (arg(0) == 'node' && arg(2)=='edit') {
+    return;
+  }
+    
+  // Unfortunately, we can not load these javascripts from theme
+  // since, for some reason, theme does not load them on paginated
+  // pages (any page  except the first). :-(
+  if (arg(0)=='sources') {
+    drupal_add_js ( ttlr_path_to_theme() . '/js/sources.listing.js');
+    drupal_add_js ( ttlr_path_to_theme() . '/js/tattler.flagging.js');  
+  }
+  
+  $nid = arg(1);
+  if (drupal_is_front_page() || arg(0) == 'node') { 
+     
+    $ntype=FALSE; 
+    if (is_numeric($nid))  {
+      // This is way too early in Drupal execution for a "node_load";
+      $ntype = @db_result(@db_query('SELECT type from {node} WHERE nid=%d', arg(1)));
+    }
+    
+    if (empty($nid) || $ntype=='source') { 
+      //drupal_add_js ( path_to_theme() . '/js/mentions.listing.js');
+      drupal_add_js ( ttlr_path_to_theme() . '/js/tattler.flagging.js');
+    }  
+  }
+  
+}
+
+function tattlerui_preprocess_node(&$vars, $hook) {
+  if ($vars['type'] == 'mention') {
+    $vars['template_files'] = array('node-mention-detail');
+  }
+}
+
+
+/**
+* path_to_theme() function returns path to engine, not the
+* active theme, when called from a module. Why - I will never
+* understand, but oh well.
+*/
+function ttlr_path_to_theme() {
+  static $ttlr_path_to_theme;
+  
+  if (empty($ttlr_path_to_theme)) {
+    $active_theme = variable_get(	'theme_default', 'tattler_theme');
+    if ($active_theme == 'garland' ) $active_theme = 'tattler_theme';
+    $ttlr_path_to_theme = drupal_get_path('theme', $active_theme);
+  }
+  
+  return $ttlr_path_to_theme;
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function tattlerui_perm() {
+  return array('administer tattler');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function tattlerui_menu() {
+  
+  $items['buzz/%node/delete'] = array(
+    'title' => 'Delete',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tattlerui_mention_delete_confirm', 1),
+    'access callback' => 'node_access',
+    'access arguments' => array('delete', 1),
+    'weight' => 1,
+    'type' => MENU_CALLBACK
+  );  
+  $items['buzz/%node/edit'] = array(
+    'title' => 'Edit Node Essentials',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tattlerui_stripped_node_edit_form'),
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_CALLBACK
+  );  
+
+  $items['tattler/term/autocomplete_notid'] = array(
+    'title' => 'Autocomplete taxonomy',
+    'page callback' => 'tattler_trend_autocomplete_notid',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );    
+
+  return $items;
+}
+
+
+
+function tattlerui_nodeapi(&$node, $op) {
+
+  
+  if ($node->type == TOPIC_CONTENT_TYPE) {
+   switch ($op) {
+     case 'insert':
+       $topic_term = tattlerui_title2topicterm($node->title);
+       $tid = _buzz_term_save($topic_term, TTLR_USER_TERMS_VID);   
+       db_query("INSERT INTO {term_node}(nid,vid,tid) VALUES(%d, %d, %d)", $node->nid, $node->vid, $tid);
+     break;
+   }
+  }
+  
+  
+  if ($node->type == FEED_CONTENT_TYPE) {
+   switch ($op) {
+     case 'insert':
+       //Need to save topic as tag separately. Topic saves it too late and does not get inherited.
+       $topic_nid = $node->{TOPIC_FIELD}[0]['nid'];
+       if (!empty($topic_nid) && $topic_nid > 0) { //if this is a topic feed
+         $topic_title = db_result(db_query("SELECT title FROM {node} WHERE nid=%d", $topic_nid));
+         $topic_term = tattlerui_title2topicterm($topic_title); 
+         $tid = _buzz_term_save($topic_term, TTLR_USER_TERMS_VID);   
+         db_query("INSERT INTO {term_node}(nid,vid,tid) VALUES(%d, %d, %d)", $node->nid, $node->vid, $tid);       
+       }
+       
+       $type = buzz_get_search_feed_type($node->{FEED_KEY_FIELD}[0]['value']);       
+       if (!empty($type)) {
+         $topic_term = 'type:' . strtolower($type);
+         $tid= _buzz_term_save($topic_term, TTLR_USER_TERMS_VID);   
+         db_query("INSERT INTO {term_node}(nid,vid,tid) VALUES(%d, %d, %d)", $node->nid, $node->vid, $tid);
+       }
+     break;
+   }
+  }
+
+
+} 
+
+/**
+* Sanitize topic name to be used as a tag.
+*/
+function tattlerui_sanitize_topicname($topic_name) {
+  $topic_term = trim($topic_name);
+  $topic_term = str_ireplace(',', '', $topic_term);
+  $topic_term = str_ireplace('"', '', $topic_term);       
+  $topic_term = str_ireplace(' ', '', $topic_term);              
+  $topic_term = substr($topic_term, 0, 40); 
+  $topic_term = strtolower($topic_term);        
+  return $topic_term;
+}
+
+/**
+* Generata a topic tag from a title. Sanitizes title, removes spaces and
+* adds topic: prefix.
+*/
+function tattlerui_title2topicterm($title) {
+  $topic_name = tattlerui_sanitize_topicname($title);
+  $topic_name = 'topic:' . $topic_name;
+  return $topic_name;
+}
+
+/**
+* A rule-set determining (aside from block configurations) when the right side bar
+* should and should not be visible (entire sidebar!).
+*/
+function tattlerui_right_sidebar_visibility() {
+  global $user;
+    
+  $visible = TRUE;
+  
+  if (arg(0)=='node' && arg(2)=='delete') $visible = FALSE;
+  if (arg(0)=='node' && arg(1)=='add') $visible = FALSE;
+  if (empty($user->uid)) $visible = FALSE; //login screen should have no blocks;
+  if (arg(0)=='trends') $visible = FALSE; //login screen should have no blocks;
+  
+  return $visible;
+}
+
+/**
+ * Mention edit form via popups
+ */
+function tattlerui_stripped_node_edit_form(&$form_state) {
+
+  $nid = arg(1);
+  $node = node_load($nid);
+  
+  if (!is_object($node) || empty($node->nid)) { //secure against hacking
+    drupal_not_found();
+    exit();
+  }
+  
+  $form['#node'] = $node;
+  $form['nid']   = array('#type' => 'value', '#value' => $node->nid);
+  $form['vid']   = array('#type' => 'value', '#value' => $node->vid);
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Title'),
+    '#default_value' => html_entity_decode(check_plain($node->title), ENT_COMPAT, 'UTF-8'),
+    '#size' => 72,    
+  );
+
+  $form['body'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Body'),
+    '#default_value' => html_entity_decode(check_plain($node->body), ENT_COMPAT, 'UTF-8'),
+    '#cols' => 65,
+    '#rows' => 7,
+  );
+  
+  $yahoo_terms = array(); $user_terms = array();
+  $terms = tattlerui_stripped_node_vocabularies();
+    
+  if (is_array($node->taxonomy)) {
+    foreach($node->taxonomy as $tid => $term) {
+      if (array_key_exists($term->vid, $terms)) {
+        $terms[$term->vid][] = $term->name;
+      }
+    }
+  }
+  
+  //implode arrays into comma-separated strings
+  foreach ($terms as $vid => $vocab) {
+    $sz_terms = (sizeof($terms[$vid])<1) ? '' : drupal_implode_tags($terms[$vid]);
+
+    $voc = taxonomy_vocabulary_load($vid);
+
+    $form['taxonomy']['tags']['#tree'] = TRUE;
+    
+    $form['taxonomy']['tags'][$vid] = array(
+          '#type' => 'textfield',
+          '#title' => $voc->name,
+          '#default_value' => $sz_terms,
+          '#autocomplete_path' => 'taxonomy/autocomplete/'. $vid,
+          '#size' => 72,
+          '#maxlength' => 1024,
+    );
+    
+  }    
+  
+  $title = substr($node->feedapi_node->url, 0, 50);
+  if (strlen($title) < strlen($node->feedapi_node->url)) $title .=  '...';
+  $options = array('attributes'=>array('target'=>'_blank'));  
+  $url = l($title,  $node->feedapi_node->url, $options);
+  $form['source_url'] = array(
+    '#value' => '<div class="buzz_edit_form_original_link">' . t('Original Link:') . ' ' . 
+                $url  . '</div>',
+  );
+  
+  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  
+  return $form;
+}
+
+/**"
+* Return "li" items for the mentions section bar.
+*/
+function tattlerui_sectionbar_elements() {
+  $active_section = $_GET['msection'];
+  if (empty($active_section)) $active_section = 'all';  //default  
+  $sections = array ('all', 'news', 'tweets', 'multimedia');
+  $sections_bar = ''; $first = TRUE;
+  
+  $active_query = $_GET;
+  unset($active_query['q']);
+  unset($active_query['page']);  
+    
+  foreach ($sections as $section) {
+    $clazz = ''; if ($first) { $clazz .=  ' first '; $first = FALSE; }   
+    if (trim($active_section) == trim($section)) { $clazz .= ' active '; }
+    $tmp_query = $active_query;
+    $tmp_query['msection'] = $section;
+      if (trim($active_section) != trim($section)) {
+        $url =  l(t(ucfirst($section)), '', 
+                          array('query'=>$tmp_query));
+      }
+      else {
+        $url = t(ucfirst($section));
+      }
+      $section_bar .= "<li class=\"$clazz\">$url</li>";
+
+  }
+
+  return $section_bar;
+}
+/**
+* Render the RSS icon on the mentions lists
+*/
+function tattlerui_mentions_rss_badge() {
+  global $user;
+  
+  $mentions_rss_icon = '<span id="mentions-rss">' . t('Subscribe') . '</span>';
+  $curr_path = 'rss/mentions'; 
+  
+  /** Filter by current Source on a Source Detail Page **/
+  if (arg(0)=='node' && is_numeric(arg(1))) {
+    $ntype = @db_result(@db_query('SELECT type from {node} WHERE nid=%d', arg(1)));
+    if ($ntype=='source') {
+      $curr_path .= '/source/' . arg(1);
+    }
+  }
+  
+  $mentions_query = $_GET;
+  unset($mentions_query['q']);
+  unset($mentions_query['page']);  
+  
+  if (function_exists('tokenauth_init') && $user->uid > 0) { // If module installed and user logged in
+    $user_token = db_result(db_query("SELECT tt.token FROM {tokenauth_tokens} tt 
+                                      INNER JOIN {users} u ON tt.uid = u.uid 
+                                      WHERE u.uid=%d AND u.status != 0", $user->uid));
+    $mentions_query['token'] = $user_token;
+  }
+  
+  
+  $mentions_rss_url = $curr_path;
+  $mentions_rss_badge =  l($mentions_rss_icon, $mentions_rss_url, 
+                          array('html'=>TRUE, 'attributes'=>array('target'=>'_blank'),
+                          'query'=>$mentions_query));
+                          
+  return $mentions_rss_badge;
+}
+
+/*
+* Prepare current url and parameters for various javascript events.
+* With an ability to exclude certain URL arguments (to avoid duplication).
+*/
+function tattlerui_get_curr_url($exclude) {
+  $mentions_query = $_GET;
+  unset($mentions_query['q']);
+  unset($mentions_query['page']);
+  unset($mentions_query[$exclude]);
+  
+ //Let's make sure there's at least one query param.
+  //This little trick will make Javascript easier.
+  if (empty($mentions_query['filter'])) {
+    $mentions_query['filter'] = 'all';
+  }  
+  
+  $curr_path = arg(0);
+  $curr_url = url($curr_path, 
+                  array('query'=>$mentions_query));
+
+  return $curr_url;  
+}
+
+/**
+* Set curr_url, with excluded arguments, for topic changed, tag filter, section filter etc.
+*/
+function tattlerui_set_curr_urls() {
+  $items = array("tagged", 'topic');
+  $vars = array();
+  foreach ($items as $item) {
+    $vars ['url4_' . $item] = tattlerui_get_curr_url($item);
+  }
+  
+  drupal_add_js(array('tattlerui' => $vars), "setting");
+}
+
+/**
+* Tag filter form definition for Mentions List
+*/
+function tattlerui_tag_filter_form() {
+   
+   
+  $form = array();
+  $form['#method'] = 'get';
+  
+  $tagged_value = empty($_GET['tagged']) ? t('Search Tag') : $_GET['tagged'];
+
+  $tip_text = t("Tip: Join tags with a comma (OR operator) or a semicolon (AND operator). Click on the tag icon to filter.");
+
+  $form['mentions_tag_filter'] = array(
+          '#type' => 'textfield',
+          '#title' => t(''),
+          '#default_value' => $tagged_value,
+          '#autocomplete_path' => 'tattler/term/autocomplete_notid',
+          '#maxlength' => 1024,
+          '#suffix' => '<div id="tag_filter_tooltip" class="tooltip">' . $tip_text . '</div>',
+  );
+  
+//  $form['ttlr_curr_url_config'] = array(
+//          '#type' => 'hidden',
+//          '#value' => $curr_url,
+//  );
+  
+  //$form['tagfilterbutton'] = array(
+  //  '#value' => '<div id="tagfilterbutton"></div>',
+  //);
+    
+  return $form;
+}
+
+/**
+ * Submit handler.
+ */
+function tattlerui_stripped_node_edit_form_submit($form, &$form_state) {
+  global $user;
+  
+  $nid = $form['nid']['#value'];
+  $node = node_load($nid);
+  
+  $node->title = $form['title']['#value'];
+  $node->body = $form['body']['#value'];
+  
+  drupal_write_record('node', $node, 'nid');
+  _node_save_revision($node, $user->uid, 'vid');
+  $op = 'update'; 
+
+
+  $node = (object)$form_state['values'];
+
+  $our_vocabs = array_keys(tattlerui_stripped_node_vocabularies());
+  
+  // Fill in terms from other vocabularies as to not lose them
+  $taxonomy = taxonomy_node_get_terms($node);  
+
+  $terms = array();
+  if (is_array($taxonomy)) {
+    foreach ($taxonomy as $term) {
+      if (!in_array($term->vid, $our_vocabs)) {
+        $terms[$term->vid][$term->tid] = $term->tid;
+      }
+    }
+  }
+
+  if (is_array($node->tags)) {
+    foreach ($node->tags as $ourvid => $ourvocab) {
+      $terms['tags'][$ourvid] = $ourvocab;
+    }
+  }
+  
+  _feedapi_source_recalc_mentions_count($node, 'update');
+  taxonomy_node_save($node, $terms);
+  
+  drupal_set_message(t('Your changes to "%title" have been saved', array('%title'=>substr($node->title, 0, 50))));
+  
+  $form_state['redirect'] = $_SERVER['HTTP_REFERER'];
+
+}
+
+/** Vocabularies that we allow editing on the stripped node edit form **/
+function tattlerui_stripped_node_vocabularies() {
+  
+  $terms = array();
+  $terms[TTLR_USER_TERMS_VID] = array();
+  if (is_numeric(BM_YAHOO_TERMS_VID)) {
+    $terms[BM_YAHOO_TERMS_VID] = array();
+  }
+
+  return $terms;
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function tattlerui_form_alter(&$form, $form_state, $form_id) {
+
+  global $user, $language;
+  if ($form_id == 'mention_node_form') {
+    $form['options']['#collapsed'] = 0;
+   
+    unset($form['options']['promote']);
+    $form['options']['promote'] = array('#type' => 'hidden', '#value' => '');
+  
+    unset($form['options']['sticky']);
+    $form['options']['sticky'] = array('#type' => 'hidden', '#value' => '');
+  
+    unset($form['comment_settings']);
+    $form['comment'] = array('#type' => 'hidden', '#value' => '0');
+    
+    unset($form['menu']);
+    unset($form['revision_information']);
+  
+    unset($form['author']);
+    $form['name'] = array('#type' => 'hidden', '#value' => $user->name);
+
+    unset($form['options']);
+    $form['status'] = array('#type' => 'hidden', '#value' => 1);  
+
+    $hide_elements = array(
+      'field_images_m', 'field_last_decorated_m',
+      'field_fulltext', 'field_last_decorated_m', 'flag', 'path', 'body_field' );
+    foreach ($hide_elements as $el) {
+      $form[$el]['#prefix'] = '<div style="border: 1px solid red; display: none;">';
+      $form[$el]['#suffix'] = '</div>';
+    }
+
+  }
+  else if ($form_id == 'topic_node_form') {
+    
+    $form['title']['#description'] = t('A <em>Topic</em> is a subject matter, an issue that you would like to monitor. Creation of a <em>Topic</em> will have this Tattler instance start monitoring the keywords associated with the topic. This process will collect <em>Mentions</em> of the <em>Topic</em> you are creating now. These <em>Mentions</em> come from a variety of <em>Sources</em>.  <em>Sources</em> will be ranked using a Tattler calculation and <em>Mentions</em> will be listed and analyzed for deeper understanding.  All of the resulting data will be provided by Tattler for collaboration and trending analysis');
+
+    if (module_exists('taxonomy') && TTLR_TOPIC_TERMS_VID>0) {
+      $form['taxonomy']['tags'][TTLR_TOPIC_TERMS_VID]['#description'] = t('A comma-separated list of keywords associated with the topic. Searching these keywords, on the Internet, should result in collection of information relevant to the topic.');
+    }
+    
+    if (module_exists('taxonomy') && TTLR_USER_TERMS_VID>0) {
+      $form['taxonomy']['tags'][TTLR_USER_TERMS_VID]['#description'] = t('A comma-separated list of terms describing this topic. These terms are "inherited" down to the mentions level and can be used later to filter content and group content across multiple topics. Example use-case: if a topic is in French, please indicate a term like: "lang:french". Another example: if several topics describe "healthcare reform" tag all of them with "track:healthcare reform" and this will allow to group mentions brought via all corresponding topics (you can later filter mentions by that unique tag).');
+    }
+    
+    unset($form['menu']);
+    unset($form['revision_information']);
+    unset($form['comment_settings']);
+    unset($form['attachments']);
+    unset($form['options']);
+    unset($form['path']);
+    
+    
+    unset($form['buttons']['preview']);
+
+    // Hide author but dont unset it, otherwise the node owner defaults to Anonymous
+    $form['author']['#type'] = 'value';
+    $form['author']['name']['#type'] = 'value';
+    $form['author']['date']['#type'] = 'value';    
+        
+  }
+
+  
+}
+
+/**
+ * Handle the delete confirmation. We need to handle this manually b/c confirm_form
+ * is broken (http://drupal.org/node/383748) when the destination has a query string.
+ */
+function tattlerui_mention_delete_confirm(&$form_state, $node) {
+  $form['nid'] = array(
+    '#type' => 'value',
+    '#value' => $node->nid,
+  );
+
+  // Fix the delete confirmation if query string exists
+  $dest = isset($_GET['destination']) ? $_GET['destination'] : 'node/'. $node->nid;
+  if (strpos($dest, '?') !== FALSE) {
+    list($path, $query) = explode('?', $dest);
+    $dest = array(
+      'path' => $path,
+      'query' => $query,
+    );
+  }
+
+  return confirm_form($form,
+    t('Are you sure you want to delete %title?', array('%title' => $node->title)),
+    $dest,
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel')
+  );
+}
+
+/**
+ * Execute fixed node deletion with confirmation.
+ */
+function tattlerui_mention_delete_confirm_submit($form, &$form_state) {
+  if ($form_state['values']['confirm']) {
+    node_delete($form_state['values']['nid']);
+  }
+
+  $form_state['redirect'] = '<front>';
+}
+
+/**
+ * Implementation of hook_flag_default_flags().
+ */
+function tattlerui_flag_default_flags() {
+  $flags = array();  
+  $flags[] = array(
+    'content_type' => 'node',
+    'name' => 'watchlist',
+    'title' => 'Watchlist',
+    'roles' => array (DRUPAL_AUTHENTICATED_RID),
+    'global' => '1',
+    'types' => array ('source'),
+    'flag_short' => 'Watchlist',
+    'flag_long' => '',
+    'flag_message' => '',
+    'flag_confirmation' => '',
+    'unflag_short' => 'Remove from Watchlist',
+    'unflag_long' => '',
+    'unflag_message' => '',
+    'unflag_confirmation' => '',
+    'link_type' => 'toggle',
+    'show_on_page' => 0,
+    'show_on_teaser' => 0,
+    'show_on_form' => 1,
+    'i18n' => 0,
+  );
+  $flags[] = array(
+    'content_type' => 'node',
+    'name' => 'blacklist',
+    'title' => 'Blacklist',
+    'roles' => array (DRUPAL_AUTHENTICATED_RID),
+    'global' => '1',
+    'types' => array ('source'),
+    'flag_short' => 'Blacklist',
+    'flag_long' => '',
+    'flag_message' => '',
+    'flag_confirmation' => '',
+    'unflag_short' => 'Remove from Blacklist',
+    'unflag_long' => '',
+    'unflag_message' => '',
+    'unflag_confirmation' => '',
+    'link_type' => 'toggle',
+    'show_on_page' => 0,
+    'show_on_teaser' => 0,
+    'show_on_form' => 1,
+    'i18n' => 0,
+  );
+  return $flags;
+}
+
+/**
+ * Implementation of hook_imagecache_default_presets().
+ */
+function tattlerui_imagecache_default_presets() {
+  $presets = array();
+  $presets['buzz_photos'] = array (
+    'presetname' => 'buzz_photos',
+    'actions' => 
+    array (
+      0 => 
+      array (
+        'weight' => '0',
+        'module' => 'imagecache',
+        'action' => 'imagecache_scale',
+        'data' => array (
+          'width' => '55',
+          'height' => '',
+          'upscale' => 1,
+        ),
+      ),
+      1 => 
+      array (
+        'weight' => '1',
+        'module' => 'imagecache',
+        'action' => 'imagecache_crop',
+        'data' => array (
+          'width' => '55',
+          'height' => '55',
+          'xoffset' => 'center',
+          'yoffset' => 'center',
+        ),
+      ),
+    ),
+  );
+  return $presets;
+}
+
+/**
+* Don't ask me why, but it's a fact that if you call drupal_add_js from
+* theme file when you are in a view - it only works on the first page, on
+* consequent pages, it does not work, so we have to do this seemingly
+* extraneous delegation simply to make sure drupal_add_js and drupal_add_css
+* functions are called from a module scope.
+*
+* @param $type
+*       either 'js' or 'css'
+*/
+function tattlerui_embed_asset($path, $type) {
+  switch ($type) {
+    case 'js':
+      drupal_add_js($path);
+      break;
+    case 'css':
+      drupal_add_css($path);
+      break;      
+  }
+}
+
+/**
+ *
+ */
+function tattlerui_plus1_js() {
+    // Defining CSS hooks to be used in the JavaScript.
+  $widget_class = 'votes';
+  $link_class = 'plus1-link';
+  $message_class = 'vote_for_this';
+  $score_class = 'number';
+
+  // Attaching these hooks names to the Drupal.settings.plus1 JavaScript object.
+  // So these class names are NOT hard-coded in the JavaScript.
+  drupal_add_js(array('plus1' => array('widget_class' => $widget_class, 'link_class' => $link_class, 'message_class' => $message_class, 'score_class' => $score_class)), 'setting');
+  
+
+  drupal_add_js(drupal_get_path('module', 'plus1') .'/jquery.plus1.js');      
+}
+
+
+/**
+ *
+ */
+function tattlerui_log_warning( $text ) {
+  return; 
+  watchdog(t('BuzzM YahooTerms'), $text, array(), WATCHDOG_WARNING );
+
+}
+
+/**
+ * Altering the mentions view query for a variety of reasons
+ */
+function tattlerui_views_query_alter(&$view, &$query) {
+  
+  require_once (dirname(__FILE__) . '/tattlerui.views.q_alters.inc');
+  $func = 'tattlerui_' . $view->name . '_views_query_alter';
+  if (function_exists($func)) {
+    $func($view, $query );
+  }
+
+}
+
+/**
+ *
+ */
+function tattlerui_safe_link ( $title, $url, $length = 30 ) {
+  $new_title = ttlr_trim($title, $length);
+  return l($new_title, $url);
+}
+
+/**
+* Cut string to given size. Add "..." in the end if shortened from original.
+*/
+function ttlr_trim($text, $length) {
+  $new_text = substr($text, 0, $length);
+  if ( strlen($new_text) != strlen($text) ) {
+    $new_text = $new_text . "...";
+  }
+  return $new_text;
+}
+
+/**
+ *
+ */
+function tattlerui_safe_teaser( $text ) { 
+  $text = strip_tags($text, '<b><img><i>');  
+  return $text;
+}
+
+/**
+* Defines variables to be passed to Javascript. Mostly i18n stuff.
+*/
+function tattlerui_init_javascript_variables() {
+
+  $messages = array(
+    'msg_blacklist' => t('Add Source to Blacklist'),
+    'msg_de_blacklist' => t('Remove Source from Blacklist'),
+    'msg_watchlist' => t('Add Source to Watchlist'),
+    'msg_de_watchlist' => t('Remove Source from Watchlist'),
+  );
+
+  drupal_add_js(array('tattler' => $messages), "setting");
+  
+  tattlerui_set_curr_urls();
+
+  $mpath = drupal_get_path ('module', 'tattlerui');
+  $scripts = array ('/js/jquery.selectbox.js',
+                    '/js/tattler-jqueryui-core1.5.3.min.js',
+                    '/js/tattler-jqueryui-1.5.3.datepicker.min.js',
+                    '/js/mentions.datepicker.js');
+                    
+  if (arg(0)!='admin') { //these script screw up admin interface, Views in particular
+    foreach ($scripts as $script) {
+      drupal_add_js($mpath . $script );
+    }    
+  }
+
+}
+
+
+/**
+ *
+ */
+function tattlerui_zebra_toggle() {
+  static $curr;
+  $curr = ($curr=='even') ? 'odd' : 'even';
+  return $curr;
+}
+
+/** 
+* if page is being filtered block titles should be prefixed with "Filtered" keyword 
+* 'query_alters' call this function with $op = 'register' and theming calls this
+* function with $op = 'query'. You can specify concrete $value for message instead
+* of generic 'Filtered'.
+**/
+function tattlerui_prefix_block_title($id, $op, $value=NULL) {
+
+  static $registry;
+  
+  if (!is_array($registry)) {
+    $registry = array();
+  }
+  
+  //Appending if two filters per id :)
+  if ($op == 'register') {
+    if ($value == NULL) {
+      $msg = t('Filtered') . ' '; 
+    }
+    else {
+      $msg = $value; 
+    }
+    
+    if (!empty($registry[$id])) { //already a filter
+      $registry[$id] = trim($registry[$id]) . ', ' . $msg . ' ';
+    }
+    else {
+      $registry[$id] = $msg . ' ';
+    }
+  }
+
+  if ($op == 'query') {
+    return $registry[$id];
+  }
+
+}
+
+/**
+* Shameless fork of tagadelic_build_weighted_tags. The original did not accept
+* an array but required DB's $result resource-set. Sigh.
+*
+* Our $result array is a collection of stdClass() objects that have
+* following properties properly set: tid, count, name, vid
+*/
+function tattlerui_build_weighted_tags($results, $steps = 6) {
+
+  if (is_array($results)) {
+    $tags = array();
+    $min = 1e9;
+    $max = -1e9;  
+    foreach ($results as $row) {
+      $tag = new stdClass();
+      $tag->tid = $row->tid;
+      $tag->count = $row->count;
+      $tag->name = $row->name;
+      $tag->vid = $row->vid;
+      $tag->number_of_posts = $tag->count;
+      $tag->count = log($row->count);
+      $min = min($min, $tag->count);
+      $max = max($max, $tag->count);
+      $tags[$tag->tid] = $tag;
+    }
+    // Note: we need to ensure the range is slightly too large to make sure even
+    // the largest element is rounded down.
+    $range = max(.01, $max - $min) * 1.0001;  
+  }
+
+  foreach ($tags as $key => $value) {
+    $tags[$key]->weight = 1 + floor($steps * ($value->count - $min) / $range);
+  }
+  return $tags;
+}
+
+
+function tattlerui_get_topics() {
+  return buzz_topics_get_topics(TTLR_TOPIC_TERMS_VID);
+}
+
+/**
+ * comma-separated list of topic titles in the system
+ *
+ */
+function tattlerui_get_topic_titles($mode=null) {
+	$sql = "SELECT distinct title 
+	       FROM {node} n 
+	       INNER JOIN {term_node} tn ON tn.nid=n.nid
+	       INNER JOIN {term_data} t ON tn.tid=t.tid
+	       WHERE n.type='%s' AND t.vid=%d";
+	
+	$res = db_query($sql, TOPIC_CONTENT_TYPE, TTLR_TOPIC_TERMS_VID);
+	
+	$topics = array();
+	
+	while ($obj = db_fetch_object($res)) {
+	  $topics[] = $obj->title;	  
+	}
+
+	if ($mode == 'array') {
+	  return ttlr_topicnames_2_tids($topics);
+	}
+	
+	$out0 = implode(', ', $topics);
+	
+	$out = substr($out0, 0, 200);
+	if (strlen($out)<strlen($out0)) {
+	  $out .= '...';
+	}
+	
+	return $out;
+}
+
+function ttlr_topicterms_names_map() {
+	$sql = "SELECT title FROM {node} n WHERE n.type='%s'";
+	
+	$res = db_query($sql, 'topic');
+	
+	$topics = array();
+	
+	while ($obj = db_fetch_object($res)) {
+	  $termname = tattlerui_title2topicterm($obj->title);
+	  $topics[$termname] = $obj->title;	  
+	}
+	
+	return $topics;
+
+}
+
+function ttlr_topicnames_2_tids($topic_names) {
+
+  $where = ''; $first = TRUE; 
+  $map = array();
+  foreach ($topic_names as $title) {
+    $tname = tattlerui_title2topicterm($title);
+    $map[$tname] = $title;
+    if (!$first) {
+      $where .= ",";
+    }
+    $where .= "'" . db_escape_string($tname) . "'";
+    $first = FALSE;    
+  }
+  
+  if (empty($where)) return array();
+  
+  $sql = "SELECT tid, name FROM {term_data} WHERE name in ($where)";
+  $res = db_query($sql, $where);
+  
+  $tids = array();
+  while ($term = db_fetch_object($res)) {
+    if (!empty($term)) {
+      $tids[$term->tid] = $map[$term->name];    
+    }
+  }
+
+  return $tids;
+  
+}
+
+function tattler_trend_autocomplete_notid($string = '') {
+  tattler_trend_autocomplete($string, FALSE);
+}
+
+/**
+* Fork of the original autocomplete but without regard for the vocab
+*/
+function tattler_trend_autocomplete($string = '', $show_tid=TRUE) {
+  
+  //Support for an AND operator
+  $and_joins = explode (';', $string );
+  
+  // The user enters a comma-separated list of tags. We only autocomplete the last tag.
+  if (is_array($and_joins)) {
+    $array2 = array();
+    foreach ($and_joins as $el) {
+      $arr = drupal_explode_tags($el);
+      if (is_array($arr)) {
+        foreach ($arr as $ar) {
+          $array2[$ar] = $ar;
+        }
+      }
+      else {
+        $array2[$el] = $el; //make sure it is unique
+      }
+    }
+    $array = array_values($array2); 
+  }
+  else {
+    $array = drupal_explode_tags($string);
+  }
+  
+  //The stupid drupal_explode_tags function removes "+" signs. Add them back in :(
+  if (is_array($array)) {
+    foreach ($array as &$val) {
+      if (is_numeric(str_replace(' ', '', $val))) {
+        $val = preg_replace('#\s+?#im', '+', $val);
+      }  
+    }
+  }
+
+  // Fetch last tag
+  $last_string = trim(array_pop($array));
+    
+  $matches = array();
+  if ($last_string != '') {
+    $result = db_query_range(db_rewrite_sql("SELECT t.tid, t.name FROM {term_data} t 
+      WHERE LOWER(t.name) LIKE LOWER('%%%s%%')", 't', 'tid'), $last_string, 0, 25);
+
+    $prefix = count($array) ? implode(', ', $array) .', ' : '';
+
+    $existing = array();
+    
+    while ($tag = db_fetch_object($result)) {
+      $n = $tag->name;
+      // Commas and quotes in terms are special cases, so encode 'em.
+      if (strpos($tag->name, ',') !== FALSE || strpos($tag->name, '"') !== FALSE) {
+        $n = '"'. str_replace('"', '""', $tag->name) .'"';
+      }
+      if ($show_tid) {
+        $tagname = $tag->name . ' [' . $tag->tid . '] ';
+      }
+      else {
+        $tagname = $tag->name;
+      }
+      
+      $tagname_lower = trim(strtolower($tagname));
+      
+      if (!in_array($tagname_lower, $existing) &&
+          strpos($tagname_lower, 'http://') === FALSE) {
+        $matches[$prefix . $n] = check_plain( $tagname );
+      }
+      
+      $existing[$tagname_lower] = $tagname_lower;
+    }
+  }
+
+  drupal_json($matches);
+}
+
+function tattlerui_filter_query_by_term(&$query) {
+  $tags = trim(urldecode($_GET['tagged']));
+  
+  $and_joins = explode(';', $tags);
+  
+  $term_conds = array();
+  
+  if (is_array($and_joins)) {
+    foreach ($and_joins as $cond) {
+        $tags = drupal_explode_tags($cond); 
+        $terms = array();
+        if (is_array($tags)) {
+          foreach ($tags as $tag) {
+            $tag = trim($tag);
+            $dbterms = taxonomy_get_term_by_name($tag);
+            if (is_array($dbterms)) {
+              foreach ($dbterms as $dbterm) {
+                $terms[$dbterm->tid] = $dbterm->tid;
+              }
+            }
+          }
+          $sz_terms = implode(',', $terms);
+        }
+      
+        $alias = $query->queue_table('term_node');          
+        $query->where[0]['clauses'][] = $alias . '.tid in (%s)';
+        $query->where[0]['args'][] = $sz_terms;   
+    }
+  }
+  
+}
+
+
+/**
+ * Implementation of hook_theme()
+ */
+function tattlerui_theme() {
+  return array(
+    'tattler_search' => array(
+      'template' => 'tattler-search',
+    ),
+    'tattler_quickhelp' => array(
+      'template' => 'tattler-quickhelp',
+    )
+  );
+}
+
+
+/**
+* Generate custom blocks
+* @param op the operation from the URL
+* @param delta offset
+* @param edit edited values if a config or save
+* @returns block HTML
+*/
+function tattlerui_block($op = 'list', $delta = 0, $edit = array())
+{ 
+  if ($op == "list")
+  {
+    $blocks = array();
+    $blocks['tattler_search'] = array(
+      'info' => t('Tattler Content Search'),
+      'status' => 0,
+      'region' => 'right_sidebar',
+      'weight' => 0,
+      'visibility' => 0,
+      'pages'=> '*admin/*',
+    );
+    $blocks['tattler_quickhelp'] = array(
+      'info' => t('Tattler Quick Help Button'),
+      'status' => 1,
+      'region' => 'right_sidebar',
+      'weight' => -155,
+      'visibility' => 0,
+      'pages'=> '*admin/*',
+    );   
+    return $blocks; 
+  }
+  else if ($op == 'view') {
+    $allowed = array('tattler_search', 'tattler_quickhelp');
+    if (in_array($delta, $allowed)) {
+      $block = array(
+        'subject' => '',
+        'content' => theme($delta),
+      );
+      return $block;
+    }
+  }
+}
+
+
+function _tattlerui_plus1_widget($nid, $score) {
+
+  global $user;
+     
+  $is_author = FALSE; //mentions are never authored by humans.
+  $voted = plus1_get_votes($nid, $user->uid);
+  $logged_in = ($user->uid==0)  ? FALSE : TRUE;
+  
+  // Load the JavaScript file.
+  // ATTENTION: We are adding javascript from  tattlerui.module since adding from a theme file breaks
+  // during pagination, for unknown reason :(
+  
+  /**
+    <div class="votes"><span class="number">5</span> <span class="vote_for_this"><a href="#" >Vote</a></span></div>
+  **/
+
+  // Defining CSS hooks to be used in the JavaScript.
+  $widget_class = 'votes';
+  $link_class = 'plus1-link';
+  $message_class = 'vote_for_this';
+  $score_class = 'number';
+
+  // And now we output the HTML.
+  $output = '<div class="'. $widget_class .' float-left">';
+  $output .= '<span class="vote_for_this">';
+  if (!$logged_in || user_access('vote on content')) {
+    if (!$logged_in && !user_access('vote on content')) {
+      $output .= '<small>'. l(t('Log in<br />to vote'), 'user', array('html' => TRUE)) .'</small>';
+    }
+    else if ($voted) { // User already voted.
+      $output .= check_plain(variable_get('plus1_you_voted', t('voted')));
+    }
+    else if (user_access('vote on content')) {
+      $output .= l(t('vote') , 'plus1/vote/'. $nid, 
+        array('query' => 'token=' . drupal_get_token($nid),
+              'attributes' => array('class' => $link_class)));      
+    }
+  }
+  
+  $output .= '</span> [';
+  
+  $output .= '<span class="'. $score_class .'">';
+  $output .= $score;
+  $output .= '</span>';
+
+  $output .= '] &nbsp;|&nbsp;</div>';
+  return $output;
+}
+
+
+/**
+ * Implementation of hook_views_api().
+ */
+function tattlerui_views_api() {
+  return array(
+    'api' => 2.0,
+  );
+}
+
+function tattlerui_preprocess(&$vars, $hook) {
+
+  if ( $hook == 'page') {
+  
+      if (arg(0) == 'node' && is_numeric(arg(1)) && !$is_source_page) { //possibly source detail
+        $nid = arg(1);
+        $node = node_load($nid);
+        if ($node->type == 'source') {
+          $is_source_page = TRUE;
+        }
+
+      }
+
+
+    if ( (arg(0) == 'node' && !(arg(1) == 'add' || $is_source_page)) || 
+         (arg(0) == 'trends')) {
+      $vars['show_topic_selector'] = TRUE;
+    }
+
+    if ( (arg(0) == 'node' && !(arg(1) == 'add'))  
+       ) {
+      if (!$is_source_page) {
+        $vars['show_tag_filter'] = TRUE;
+      }
+    }
+    
+    if (arg(0) == 'comment' ) {
+      $vars['show_tattler_toolbar'] = TRUE;
+
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->page_name = t('Comment');      
+      $vars['ttlr_toolbar'] = $ttlrToolBar;
+      
+    }
+    
+    
+    if (arg(0) == 'node') { //home page
+    
+      $vars['show_tattler_toolbar'] = TRUE;
+      $names = array();  
+      
+      $names['filter'] = array (
+        'all' => t('All'),
+        'watchlist' => t('Watchlist'),    
+        'mostvotes' => t('Most Votes'),    
+        'bookmarks' => t('Bookmarks'),    
+      );
+    
+      $names['timeframe'] = array (
+        'all' => t('All'),  
+        //'givendate' => t('Given Date'),    
+        'week' => t('Week'),        
+        'month' => t('Month'),        
+        'sixmonths' => t('6 Months'),            
+        'year' => t('One Year'),            
+      );
+      
+      $tattler_page_name = t('Mentions');
+      
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = _tattlerui_toolbar_links('filter', $names, 'node');
+      $ttlrToolBar->timeframe = _tattlerui_toolbar_links('timeframe', $names, 'node');
+      $ttlrToolBar->page_name = t('Mentions');      
+      $vars['ttlr_toolbar'] = $ttlrToolBar;
+    
+    }
+    
+    if (arg(0) == 'sources') {
+
+      $vars['show_tattler_toolbar'] = TRUE;        
+      $names = array();  
+      
+      $names['filter'] = array (
+        'all' => t('All'),
+        'watchlist' => t('Watchlist'),    
+        'blacklist' => t('Blacklist'),    
+      );
+    
+      $names['sortby'] = array (
+        'mostbuzz' => t('Most Buzz'),          
+        'chrono' => t('Reverse-Chrono'),    
+        'alpha' => t('Alphabetical'),        
+      );
+    
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = _tattlerui_toolbar_links('filter', $names, 'sources');
+      $ttlrToolBar->timeframe = _tattlerui_toolbar_links('sortby', $names, 'sources');
+      $ttlrToolBar->page_name = t('Sources');      
+      $vars['ttlr_toolbar'] = $ttlrToolBar;
+
+    }
+    
+    if (arg(0) == 'trends') {
+
+      $vars['show_tattler_toolbar'] = TRUE;    
+      $names = array();  
+      
+      $names['filter'] = array ();
+    
+      $names['timeframe'] = array (
+        //'all' => t('All'),  
+        //'givendate' => t('Given Date'),    //disabled
+        'week' => t('Week'),        
+        'month' => t('Month'),        
+        'sixmonths' => t('6 Months'),            
+        'year' => t('One Year'),            
+      );
+      
+      if (empty($_GET['timeframe']) || $_GET['timeframe'] == 'all') $_GET['timeframe'] = 'week';
+    
+      
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = _tattlerui_toolbar_links('filter', $names, 'trends');
+      $ttlrToolBar->timeframe = _tattlerui_toolbar_links('timeframe', $names, 'trends');
+      $ttlrToolBar->page_name = t('Trends');
+      $vars['ttlr_toolbar'] = $ttlrToolBar;
+      
+    }
+    
+    if (arg(0) == 'taxonomy' && arg(1) == 'term' && is_numeric(arg(2))) {
+    
+      $vars['show_tattler_toolbar'] = TRUE;    
+      $names = array( 'filter' => array(), 'sorting' => array() );  
+      
+      $names['filter'] = array (
+        'all' => t('All'),
+    //    'watchlist' => t('Watchlist'),  // Does not make sense in a context of one specific source
+        'bookmarks' => t('Bookmarks'),    
+      );
+    
+      $names['timeframe'] = array (
+        'all' => t('All'),  
+    //    'givendate' => t('Given Date'),  // Too much hassle, not important
+        'week' => t('Week'),        
+        'month' => t('Month'),        
+        'sixmonths' => t('6 Months'),            
+        'year' => t('One Year'),            
+      );
+      
+      $tid = arg(2);
+      
+      if (is_numeric($tid)) {
+        $term = taxonomy_get_term($tid); 
+        $termname='';
+        if (!empty($term->name))    {
+          $termname = ttlr_trim($term->name, 60);
+        }
+      }
+
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = _tattlerui_toolbar_links('filter', $names, 'taxonomy/term/' . $tid);
+      $ttlrToolBar->timeframe = _tattlerui_toolbar_links('timeframe', $names, 'taxonomy/term/' . $tid);
+      $ttlrToolBar->page_name = t('Tagged:') . ' ' . $termname ;
+      $vars['ttlr_toolbar'] = $ttlrToolBar;
+
+    }
+    
+    if (arg(0) == 'topics') { //topics  
+      $vars['show_tattler_toolbar'] = TRUE;
+      
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = '';
+      $ttlrToolBar->timeframe = '';
+      $ttlrToolBar->page_name = t('Topics');      
+      $vars['ttlr_toolbar'] = $ttlrToolBar;    
+    }
+
+    if (arg(0) == 'node' && arg(1) == 'add' && arg(2) == 'topic') { //topic add  
+      $vars['show_tattler_toolbar'] = TRUE;
+      
+      $ttlrToolBar = new stdClass();
+      $ttlrToolBar->show_only = '';
+      $ttlrToolBar->timeframe = '';
+      $ttlrToolBar->page_name = t('Add Topic');      
+      $vars['ttlr_toolbar'] = $ttlrToolBar;    
+    }
+
+    if ($is_source_page) { //possibly source detail
+        $vars['show_tattler_toolbar'] = TRUE;      
+        $ttlrToolBar = new stdClass();
+        $ttlrToolBar->show_only = '';
+        $ttlrToolBar->timeframe = '';
+        $ttlrToolBar->page_name = t('Source Profile');      
+        $vars['ttlr_toolbar'] = $ttlrToolBar;    
+    }
+
+    
+  }
+  
+}
+
+function _tattlerui_toolbar_links( $type, $names, $views_uri) {
+
+   $active_query = $_GET;
+   unset($active_query['q']);
+   unset($active_query['page']);  
+   
+   if (empty($active_query['timeframe'])) $active_query['timeframe'] = 'all'; //default
+   if (empty($active_query['filter'])) $active_query['filter'] = 'all'; //default   
+   if (empty($active_query['sortby'])) $active_query['sortby'] = 'mostbuzz'; //default      
+
+   if (arg(0) == 'sources') {
+    unset ($active_query['timeframe']);
+   }
+   else {
+    unset ($active_query['sortby']);
+   }
+   
+   switch ($type) {
+    case 'timeframe':
+      $label = t('TIMEFRAME');
+      break;
+    case 'filter':
+      $label = t('SHOW ONLY');
+      break;
+    case 'sortby':
+      $label = t('SORT BY');
+      break;      
+   }
+
+
+   $out = '<ul class="toolbar_links" class="clearfix">';
+   
+   if (is_array($names[$type]) && sizeof($names[$type]) > 0) {
+    if (!empty($label)) {
+      $out .= '<li>' . $label . ':</li>';
+    }
+    
+    foreach ($names[$type] as $key => $name){
+      $new_query = $active_query;
+      $new_query[$type] = $key;
+      $link = l($name, $views_uri, array('query'=>$new_query));
+        $clazz='';
+        if ($active_query[$type]==$key) {$clazz='class="active"';}
+      $out .= '<li ' . $clazz . '>' . $link . '</li>';
+    }
+    
+   }
+   
+   $out .= '</ul>';
+   
+   return $out;
+}

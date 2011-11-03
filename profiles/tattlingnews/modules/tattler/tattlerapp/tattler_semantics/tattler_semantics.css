@@ -1,0 +1,66 @@
+/*
+   $vocabs['People'] = array($entities['Person']);
+    $vocabs['Organizations'] = array($entities['Organization']);  
+    $vocabs['Companies'] = array($entities['Company']);    
+    $vocabs['Locations'] = array($entities['City'], $entities['ProvinceOrState']); 
+
+*/
+
+div#semantic-entities-block ul li {
+  background: none;
+  list-style: none;
+  display: block;
+  height: 27px;
+/*  border: 1px solid silver; */
+  padding-left: 23px;
+}
+
+div#semantic-entities-block ul li a {
+  font-family: Arial;
+  font-size: 13px;
+  float: left;
+  display: block;
+}
+
+div#semantic-entities-block ul li div.count {
+  float: right;
+  color: gray;
+}
+
+/** Iconography **/
+    
+div#semantic-entities-block li.company {
+  background: transparent url(img/tattler_semantics_icons.png) -4px -114px no-repeat;
+}
+
+div#semantic-entities-block li.person {
+  background: transparent url(img/tattler_semantics_icons.png) -4px -41px no-repeat;
+}
+
+div#semantic-entities-block li.organization {
+  background: transparent url(img/tattler_semantics_icons.png) -4px -78px no-repeat;
+}
+
+div#semantic-entities-block li.location {
+  background: transparent url(img/tattler_semantics_icons.png) -4px -150px no-repeat;
+}
+
+
+/** Colors **/
+
+div#semantic-entities-block li.company a {
+  color: #33b6dc;  
+}
+
+div#semantic-entities-block li.person a {
+  color: #dc4333;  
+}
+
+div#semantic-entities-block li.organization a {
+  color: #8a3aa7;  
+}
+
+div#semantic-entities-block li.location a {
+  color: #62bb66;  
+}
+

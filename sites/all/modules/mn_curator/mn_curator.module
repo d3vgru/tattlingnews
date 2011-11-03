@@ -1,0 +1,3 @@
+<?php
+
+include_once('mn_curator.features.inc');

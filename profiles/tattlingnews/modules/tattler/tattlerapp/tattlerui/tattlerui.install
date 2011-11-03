@@ -1,0 +1,50 @@
+<?php
+/**
+ * @file tattlerui.install
+ */
+
+/**
+ * Implementation of hook_install();
+ */
+function tattlerui_install() {
+  // Create the user tags vocabulary and save its vid
+	$vocab = array();
+  $vocab['name'] = t('Tattler User Tags');
+  $vocab['tags'] = TRUE;
+  $vocab['nodes'] = array('mention' => TRUE, 'topic' => TRUE, 'feed' => TRUE);
+  $vocab['weight'] = -1;
+  taxonomy_save_vocabulary($vocab);
+  variable_set('tattler_user_terms_vid', $vocab['vid']);
+
+  // Create the topic tags vocabulary and save its vid
+	$vocab = array();
+  $vocab['name'] = t('Tattler Topic Keywords');
+  $vocab['tags'] = TRUE;
+  $vocab['nodes'] = array('mention' => TRUE, 'topic' => TRUE, 'feed' => TRUE);
+  $vocab['weight'] = -5;
+  taxonomy_save_vocabulary($vocab);
+  variable_set('tattler_topic_terms_vid', $vocab['vid']);
+  
+  variable_set('plus1_you_voted', t('voted'));
+}
+
+
+/**
+ * Implementation of hook_uninstall();
+ */
+function tattlerui_uninstall() {
+  // Uninstalling, remove the user tags vocab
+  $vid = variable_get('tattler_user_terms_vid', FALSE);
+  if ($vid) {
+    taxonomy_del_vocabulary($vid); 
+    variable_del('tattler_user_terms_vid');
+  }
+}
+
+
+function tattlerui_update_6101() {
+  global $db_type;
+  $ret = array();
+  db_add_index($ret, 'node', 'node_type_status', array('type', 'status'));
+  return $ret;
+}

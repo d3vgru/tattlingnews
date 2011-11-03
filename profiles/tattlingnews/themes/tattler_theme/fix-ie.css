@@ -1,0 +1,26 @@
+#timeframe_filter {
+	margin: 5px 0 10px 0; 
+}
+
+#top_nav {
+	padding-left: 87px;
+	}
+	
+#sources_detail #timeframe_filter {
+	margin: 0 0 10px 0; 
+}
+
+.listing_area .entry_detail {
+	padding-bottom: 10px;
+	}
+
+
+#photos li img {
+	padding-bottom: 5px;
+}
+	
+.chart_icon {
+	width: 48px;
+	}
+
+#search_button {margin: 1px 0 0 0;}

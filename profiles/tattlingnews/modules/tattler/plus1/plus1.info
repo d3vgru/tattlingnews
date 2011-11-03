@@ -1,0 +1,12 @@
+; $Id: plus1.info,v 1.1.4.1 2008/09/07 22:14:32 chill35 Exp $
+name = Plus 1
+description = "A +1 voting widget for nodes."
+package = Voting
+dependencies[] = votingapi
+core = 6.x
+; Information added by drupal.org packaging script on 2011-02-18
+version = "6.x-2.7"
+core = "6.x"
+project = "plus1"
+datestamp = "1298048750"
+

@@ -1,0 +1,8 @@
+$Id: INSTALL.txt,v 1.1 2008/05/27 19:54:22 milosh Exp $
+
+==================================================================================
+Installation instructions:
+==================================================================================
+
+Enable thefeedapi_itemfilter module and these filtering modules that you would like to
+use in your site.

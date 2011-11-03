@@ -1,0 +1,13 @@
+<?php 
+// $Id: mn_test.module,v 1.1.2.2 2010/10/09 18:59:36 diggersf Exp $
+/**
+ * @file
+ *   Managing News test module
+ *   
+ * Managing News specific module for running tests
+ */
+define('MANAGINGNEWS_TEST_THEME', 'bluemarine');
+
+
+
+

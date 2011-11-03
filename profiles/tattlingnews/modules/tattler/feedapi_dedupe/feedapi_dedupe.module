@@ -1,0 +1,316 @@
+<?php
+
+// $Id: feedapi_dedupe.module,v 1.1 2009/10/13 19:25:36 inadarei Exp $
+
+/**
+ * @file
+ * Aggressive (remorseless?) de-duplication and historical dup cleanup module for FeedAPI
+ *
+ */
+
+
+/** 
+* hook_perm implementation
+*/ 
+function feedapi_dedupe_perm() {
+  return array('administer feedapi_dedupe');
+}
+
+/*
+* hook_menu implementation
+*/
+function feedapi_dedupe_menu() {
+
+  $items['admin/settings/feedapi/dedupe'] = array(
+    'title' => 'FeedAPI de-Dupe',
+    'description' => 'Configure the settings for FeedAPI de-Dupe.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feedapi_dedupe_admin_settings_form'),
+    'access arguments' => array('administer feedapi_dedupe'),
+    'type' => MENU_LOCAL_ITEM,
+  );
+
+
+  $items['feedapi_dedupe/clean'] = array(
+    'title' => 'Cleanup Duplicates in FeedAPI Feeds',
+    'page callback' => 'feedapi_dedupe_clean',
+    'access arguments' => array('administer feedapi_dedupe'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+function feedapi_dedupe_clean() {
+  feedapi_dedupe_clean_duplicates();
+  drupal_goto();
+}
+
+
+/**
+ * Implementation of hook_feedapi_settings_form().
+ * $type is either "processor" or "parser"
+ */
+/*function feedapi_dedupe_feedapi_settings_form($type) {
+  $form = array();
+  
+  switch ($type) {
+    case 'processors':
+      $form['extreme_dedupe'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Extreme de-duplication of feed items across all feeds.'),
+        '#default_value' => TRUE,
+        '#weight' => -100,
+      );
+      break;
+  }
+  return $form;
+}*/
+
+//function feedapi_dedupe_feedapi_item($op) {
+//  switch ($op) {
+//
+//    case 'unique':
+//        $args = array_slice(func_get_args(), 1);
+//      return _feedapi_dedupe_check_unique($args);
+//      break;
+//      
+//  }
+//}
+
+
+
+function feedapi_dedupe_feedapi_itemfilter($op, &$feed, &$options)
+{
+  switch ($op) {
+    // Prepare settings for the filter.
+    case 'settings':
+      $form['info'] = array(
+      '#type' => 'item',
+      '#description' => t('Dedupe filter will perform aggressive de-duplication across all feeds.'),
+      '#weight' => -15,
+      );
+      return $form;
+      break;
+
+      // Process the items.
+      case 'process':
+          error_log('============ START Filtering with ' . sizeof($feed->items) . ' items');
+          // Get through each feed item.
+          foreach ($feed->items as $key => $item) {
+            $exists = _feedapi_dedupe_check_unique($item);
+            if ($exists !== FALSE) {
+              unset($feed->items[$key]);
+            }
+          } // end of items parsing
+
+          error_log('============= ENDED Filtering with ' . sizeof($feed->items) . ' items');
+        break;
+  } // end switch
+}
+
+
+function _feedapi_dedupe_check_unique($feed_item) {
+  
+  $title = trim($feed_item->title);
+  $url = trim(urldecode($feed_item->options->original_url)); 
+
+  if (class_exists('MentionSourceExtractor', FALSE)) {
+    $extractor = new MentionSourceExtractor($url);
+    $url = $extractor->getOriginalURL();
+  }
+  
+  $msg =  '%% DEDUPE request for: ' . $title . ' -- ' . $url;
+  error_log ($msg);
+  
+  //-- There's a bunch of special cases that we just know is garbage.
+  if (feedapi_dedupe_is_special_case($title, $url)) {
+    return TRUE;
+  }
+  
+  $uniqfield = substr($url,7,15) . substr($title,0,25);
+  
+  switch (variable_get('feedapi_dedupe_mode', 1))   {
+    case 0: //url-based
+        $sql = "SELECT n.nid
+      FROM {node} n
+      INNER JOIN {feedapi_node_item} i ON i.nid=n.nid
+      WHERE type='%s' AND url = '%s'
+      LIMIT 1";
+      
+      $dnid = db_result(db_query($sql, 
+              variable_get('feedapi_dedupe_content_type', feedapi_dedupe_content_type()),
+              $url));
+    break;
+    
+    case 1: //title-based
+      $start = time();
+      $sql = "SELECT n.nid  
+      FROM {node} n
+      INNER JOIN {feedapi_node_item} i ON i.nid=n.nid
+      WHERE type='%s' AND CONCAT(SUBSTR(`url`, 8, 15), SUBSTR(`title`, 1, 25))='%s' 
+      LIMIT 1";
+      
+      $dnid = db_result(db_query($sql, 
+              variable_get('feedapi_dedupe_content_type', feedapi_dedupe_content_type()),
+              $uniqfield));
+      $elp = time() - $start;
+    break;
+  }
+
+  if (is_numeric($dnid)) { //duplicate found!
+    error_log ('CONCLUSION: Duplicate ' . $dnid);
+    return $dnid;
+  }
+  else {
+    error_log ('NOOOOT DUPLICATE');
+    return FALSE;
+  }
+
+   
+}
+
+/**
+* There's a bunch of special cases that we just know is garbage.
+*/
+function feedapi_dedupe_is_special_case($title, $url) {
+  if (trim($title) == 'No results') {
+    return TRUE;
+  }
+}
+
+function feedapi_dedupe_content_type() {
+  if (function_exists('buzzmonitor_mention_node_type')) { //BuzzMonitor integration
+    $feedapi_dedupe_content_type = buzzmonitor_mention_node_type();
+  }
+  else {
+    $feedapi_dedupe_content_type = 'feed_item';
+  }
+  
+  return $feedapi_dedupe_content_type;
+}
+
+function feedapi_dedupe_admin_settings_form() {
+  $form = array();
+
+  $form['feedapi_dedupe_content_type'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Feed Item Content Type'),
+    '#default_value' => variable_get('feedapi_dedupe_content_type', feedapi_dedupe_content_type()),
+    '#required' => TRUE
+  );
+
+  $form['feedapi_dedupe_batch_size'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Items to de-dupe per run'),
+    '#default_value' => variable_get('feedapi_dedupe_batch_size', 50),
+    '#required' => TRUE
+  );
+
+  $form['feedapi_dedupe_mode'] = array(
+    '#type' => 'radios',
+    '#title' => t('De-dupe Mode'),
+    '#default_value' => variable_get('feedapi_dedupe_mode', 1),
+    '#required' => TRUE,
+    '#options' => array(
+      0 => t('De-dupe by unique URL'),
+      1 => t('De-dupe by unique Title (more aggressive)'),      
+    ),
+  );
+
+  $form['feedapi_dedupe_clean'] = array(
+    '#prefix' => '<div id="feedapi_dedupe_clean">',
+    '#value' => l(t('Clean Historical Data'), 'feedapi_dedupe/clean', 
+                array('query'=>drupal_get_destination())),
+    '#suffix' => '</div><br/>',
+  );
+
+  return system_settings_form($form);
+
+}
+
+function feedapi_dedupe_cron() {
+  feedapi_dedupe_clean_duplicates();
+}
+
+function feedapi_dedupe_clean_duplicates() {
+  
+/** Title-based
+
+SELECT i.nid, GROUP_CONCAT(i.nid SEPARATOR ',') as nids, `title`, `url`, 
+count(*) as num, CONCAT(SUBSTR(`url`, 8, 7), SUBSTR(`title`, 0, 25)) as uniqfield 
+FROM buzz_node n
+INNER JOIN buzz_feedapi_node_item i ON i.nid=n.nid
+WHERE type='mention' 
+GROUP BY (uniqfield)
+HAVING `url` IS NOT NULL AND url!='' AND num>1
+ORDER BY num desc
+LIMIT 50
+*/  
+  
+switch (variable_get('feedapi_dedupe_mode', 1))   {
+  case 0: //url-based
+      $sql = "SELECT GROUP_CONCAT(i.nid SEPARATOR ',') as nids, `title`, `url`, count(*) as num 
+    FROM {node} n
+    INNER JOIN {feedapi_node_item} i ON i.nid=n.nid
+    WHERE type='%s' 
+    GROUP BY `url`
+    HAVING `url` IS NOT NULL AND url!='' AND num>1
+    ORDER BY num desc
+    LIMIT %d";
+  break;
+  
+  case 1: //title-based
+    $sql = "SELECT GROUP_CONCAT(i.nid SEPARATOR ',') as nids, `title`, `url`, 
+    count(*) as num, CONCAT(SUBSTR(`url`, 8, 15), SUBSTR(`title`, 1, 25)) as uniqfield  
+    FROM {node} n
+    INNER JOIN {feedapi_node_item} i ON i.nid=n.nid
+    WHERE type='%s' 
+    GROUP BY (uniqfield)
+    HAVING `url` IS NOT NULL AND url!='' AND num>1
+    ORDER BY num desc
+    LIMIT %d";
+  break;
+}
+
+  $res = db_query($sql, 
+                  variable_get('feedapi_dedupe_content_type', feedapi_dedupe_content_type()),
+                  variable_get('feedapi_dedupe_batch_size', 10)
+                 );
+  
+  $arr_nids = array(); $i=0;
+  while ($row = db_fetch_object($res)) {
+    $nids = $row->nids;
+    $tmp = explode(',', $nids);
+    sort($tmp);
+    array_shift($tmp); //-- remove the oldest element (lowest nid) so we preserve the first node off of duplicates.
+    $arr_nids = array_merge($tmp, $arr_nids); //this makes sure that arr_nids is always an array, even if empty.   
+  }
+  
+  $is_not_cron_running = variable_get('cron_semaphore', 0);
+  $is_not_cron_running = empty($is_not_cron_running);
+  
+  if (!is_array($arr_nids) || sizeof($arr_nids)<1) {
+    if ($is_not_cron_running) { //-- don't set messsages in cron
+      drupal_set_message('No duplicates found');
+    }
+    return;
+  }
+  
+  $affected = sizeof($arr_nids);
+  //$merged_nids = implode(',', $arr_nids);
+  
+  if (is_array($arr_nids)) {
+    foreach($arr_nids as $nid) {
+      node_delete($nid); //-- This ensures proper cleanup, including - recalculation of mentions counts in sources.
+    }
+  }
+ 
+  if (!$is_not_cron_running) { //-- don't set messsages in cron
+    drupal_get_messages(NULL, TRUE); //-- We don't want user to see node delete messages.
+    error_log($affected . ' duplicates cleaned!');
+  }
+  else {
+    drupal_set_message($affected . ' duplicates cleaned!');
+  }
+}

@@ -1,0 +1,7 @@
+; $Id: mn_test.info,v 1.1.2.1 2010/09/13 02:13:25 alexb Exp $
+name = "Managing News test"
+description = "Provides a framework for unit and functional testing for Managing News."
+package = Development
+version = VERSION
+core = "6.x"
+dependencies[] = simpletest
