@@ -99,7 +99,7 @@ function managingnews_profile_modules() {
 //	'img_extractor',
 	'plus1',
 //	'search_config',
-//	'swfobject_api',
+	'swfobject_api',
 	'tagadelic',
 	'views_groupby',
 	'views_charts',

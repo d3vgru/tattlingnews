@@ -1,0 +1,207 @@
+<?php
+// $Id: swfobject_api.module,v 1.2.2.20.2.5 2010/05/10 11:42:23 arthuregg Exp $
+
+/**
+ * @file
+ * Integrates the SWFObject Javascript library, allowing you to easily
+ * embed flash in your website.
+ *
+ * Please see the README.txt file for more information on this module.
+ */
+
+
+/* *********************************************** */
+/* Drupal Hook Functions                           */
+/* *********************************************** */
+
+/**
+ * Implementation of hook_help().
+ */
+function swfobject_api_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#swfobject_api':
+    case 'admin/settings/swfobject_api':
+      return t('This module creates an API for flash content generation in pages based on the swfObject library. For more information, visit <a href="http://code.google.com/p/swfobject/">http://code.google.com/p/swfobject/</a>.');
+    break;
+  }
+}
+
+
+/**
+ * Implementation of hook_perm().
+ */
+function swfobject_api_perm() {
+  return array('administer swfobject');
+}
+
+
+/**
+ * Implementation of hook_menu().
+ */
+function swfobject_api_menu() {
+  $items = array();
+  $items['admin/settings/swfobject_api'] = array(
+    'title' => 'SWFObject API',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('swfobject_api_settings_form'),
+    'access arguments' => array('administer swfobject'),
+  );
+  return $items;
+}
+
+
+/**
+ * Implementation of hook_theme().
+ * @return array
+ */
+function swfobject_api_theme() {
+  return array(
+    'swfobject_api' => array(
+      'arguments' => array(
+        'url' => NULL,
+        'params' => NULL,
+        'vars' => NULL,
+        'id' => NULL,
+        'attributes' => NULL
+      )
+    )
+  );
+}
+
+
+/* *********************************************** */
+/* Configuration Functions                         */
+/* *********************************************** */
+
+/**
+ * Menu callback: SWFObject API configuration form.
+ * @return array
+ *   drupal form array
+ */
+function swfobject_api_settings_form() {
+  $form = array();
+  $form['swfoa_settings_version'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default minimum Flash version required'),
+    '#description' => t('This value can be overridden via the theme call.'),
+    '#default_value' => variable_get('swfoa_settings_version', '6'),
+    '#required' => TRUE,
+  );
+  $form['swfoa_settings_express'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable express install.'),
+    '#description' => t('Express install allows player upgrades without having to leave the site. Only versions 6.0.65 and above are supported.'),
+    '#default_value' => variable_get('swfoa_settings_express', FALSE),
+  );
+  $form['swfoa_settings_path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Path to SWFObject JS.'),
+    '#description' => t('Path to the SWFObject JS file.'),
+    '#default_value' => variable_get('swfoa_settings_path', drupal_get_path('module', 'swfobject_api') .'/swfobject.js'),
+  );
+  return system_settings_form($form);
+}
+
+
+/* *********************************************** */
+/* Internal Functions                              */
+/* *********************************************** */
+
+/**
+ * Ensure that the necessary JS files are loaded.
+ *
+ * This function automatically checks to make sure that the JS files are only
+ * loaded once.
+ * @param array $settings
+ */
+function swfobject_api_ensure_swfobject($settings = array()) {
+  static $done = FALSE;
+  if (! $done) {
+    // Load the swfobject library and our add-on to activate it.
+    drupal_add_js(variable_get('swfoa_settings_path', drupal_get_path('module', 'swfobject_api') .'/swfobject.js'), 'module', 'header');
+    // Load the JS which creates loads the params into the page
+    drupal_add_js(drupal_get_path('module', 'swfobject_api') .'/swfobject_api.js', 'module', 'footer');
+    $done = TRUE;
+  }
+  drupal_add_js($settings, 'setting', 'footer', FALSE, TRUE, FALSE);
+}
+
+
+/* *********************************************** */
+/* Theme Functions                                 */
+/* *********************************************** */
+
+ /**
+ * Theme function to add a flash file to the page.
+ *
+ * The actual returned HTML from this function is minimal.  Its main purpose is
+ * to setup the Javascript properly on content which is cached by input filters
+ *
+ * @ingroup themeable
+ * @param $url
+ *   A web accessible url to the flash file.
+ * @param $params
+ *   An associative array of parameters that describe the SWF.
+ * @param $vars
+ *   An associative array of variables to pass through to the SWF flashvars value.
+ * @param $id
+ *   An id to appened to the so object.
+ * @param $attributes
+ *   Associative array of attributes to apply to the resulting flash tag (embed, object, etc.)
+ */
+function theme_swfobject_api($url, $params = array(), $vars = array(), $id = NULL, $attributes = array()) {
+  // keep track of each div ID
+  static $swfobject_id = 1;
+
+  // Build the base params.
+  $base_params = array(
+    'width' => '100%',
+    'height' => '100%',
+    'no_flash' => t('Sorry, you need to install flash to see this content.'),
+    'version' => variable_get('swfoa_settings_version', '6'),
+    'type' => 'movie',
+    'bgcolor' => '#FFFFFF',
+    'express_redirect' => variable_get('swfoa_settings_express', TRUE) ? drupal_get_path('module', 'swfobject_api') .'/expressinstall.swf' : 'false',
+    'class' => '',
+  );
+
+  // Merge in default parameters.
+  $params += $base_params;
+
+  // Increment the div id to allow for multiple players on the page
+  $div_id = empty($id) ? 'swfobject-'. $swfobject_id++ : $id;
+
+  // are the no_flash parameters being passed with a filter?
+  if (is_array($params['no_flash'])) {
+    $params['no_flash'] = check_markup($params['no_flash']['text'], $params['no_flash']['filter']);
+  }
+
+  // assign param data to the specific parameters
+  $height = $params['height'];
+  $width = $params['width'];
+  $express_redirect = $params['express_redirect'];
+  $version = $params['version'];
+  $bgcolor = $params['bgcolor'];
+  $no_flash = $params['no_flash'];
+  $class = implode(' ', array($params['class'], 'swfobject'));
+  unset($params['height'], $params['width'], $params['express_redirect'], $params['version'], $params['bg_color'], $params['no_flash'], $params['class']);
+
+  $settings['swfobject_api']['files'][$div_id] = array(
+    'url' => $url,
+    'params' => $params,
+    'flashVars' => $vars,
+    'attributes' => $attributes,
+    'height' => $height,
+    'width' => $width,
+    'express_redirect' => $express_redirect,
+    'version' => $version,
+    'bgcolor' => $bg_color,
+  );
+
+  // add the JS to the page
+  swfobject_api_ensure_swfobject($settings);
+
+  // Return the placeholder HTML that will normally get
+  // replaced with flash content.
+  return "<div id=\"$div_id\" class=\"{$class}\">{$no_flash}</div>\n";
+}

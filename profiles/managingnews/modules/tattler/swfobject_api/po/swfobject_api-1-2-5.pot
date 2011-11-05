@@ -1,0 +1,71 @@
+# $Id$
+#
+# LANGUAGE translation of Drupal (general)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# Generated from file: swfobject_api.module,v 1.2.2.5 2007/08/21 14:49:37 arthuregg
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"POT-Creation-Date: 2007-10-10 11:52-0400\n"
+"PO-Revision-Date: YYYY-mm-DD HH:MM+ZZZZ\n"
+"Last-Translator: NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <EMAIL@ADDRESS>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: swfobject_api.module:16
+msgid "This module creates an API for flash content generation in pages based on the swfObject library. For more information, visit <a href=\"http://blog.deconcept.com/swfobject/\">http://blog.deconcept.com/swfobject/</a>."
+msgstr ""
+
+#: swfobject_api.module:31
+msgid "SWFObject API"
+msgstr ""
+
+#: swfobject_api.module:32
+msgid "Configure the SWFObject API."
+msgstr ""
+
+#: swfobject_api.module:52
+msgid "Settings"
+msgstr ""
+
+#: swfobject_api.module:57
+msgid "Default minimum version required"
+msgstr ""
+
+#: swfobject_api.module:58
+msgid "This value can be overridden via the theme call."
+msgstr ""
+
+#: swfobject_api.module:64
+msgid "Enable express install."
+msgstr ""
+
+#: swfobject_api.module:65
+msgid "Express install allows player upgrades without having to leave the site. Only versions 6.0.65 and above are supported."
+msgstr ""
+
+#: swfobject_api.module:68
+msgid "Save settings"
+msgstr ""
+
+#: swfobject_api.module:88
+msgid "Sorry, you need to install flash to see this content."
+msgstr ""
+
+#: swfobject_api.module:0
+msgid "swfobject_api"
+msgstr ""
+
+#: swfobject_api.info:0
+msgid "SWFObject Module"
+msgstr ""
+
+#: swfobject_api.info:0
+msgid "Implements the SWFObject Library, makes it easy for developers to add flash content"
+msgstr ""
+

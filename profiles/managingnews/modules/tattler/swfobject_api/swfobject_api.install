@@ -1,0 +1,57 @@
+<?php
+// $Id: swfobject_api.install,v 1.1.2.1.4.2 2010/05/10 11:42:23 arthuregg Exp $
+
+/**
+ * @file
+ * Install file for SWFObject API module.
+ */
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function swfobject_api_uninstall() {
+  variable_del('swfoa_settings_express');
+  variable_del('swfoa_settings_version');
+  variable_del('swfoa_settings_path');
+}
+
+/**
+ * Implementation of hook_requirements().
+ *
+ * TODO: We could probably check the swfobject file's version here too, similar
+ * to how the jQuery_update 5.x module checks version of jQuery.
+ */
+function swfobject_api_requirements($phase) {
+  $requirements = array();
+  $t = get_t();
+
+  $path = variable_get('swfoa_settings_path', drupal_get_path('module', 'swfobject_api') .'/swfobject.js');
+  if (! file_exists($path)) {
+    $error_message = $t("Please download the swfobject package from !url and place the required files in the swfobject module directory. See README.txt for more info.",
+      array('!url' => l('http://code.google.com/p/swfobject/', 'http://code.google.com/p/swfobject/'))
+    );
+
+    // we need to explicitly set the message when installing the module,
+    // because drupal_check_module() in install.inc doesn't print out
+    // warning messages, and we prefer to tell the user what's wrong.
+    if ($phase == 'install') {
+      drupal_set_message($error_message, 'warning');
+    }
+
+    $requirements['swfobject_api'] = array(
+      'title' => $t('SWFObject API'),
+      'description' => $error_message,
+      'severity' => $phase == 'install' ? REQUIREMENT_WARNING : REQUIREMENT_ERROR,
+      'value' => $t('Copy swfobject.js'),
+    );
+  }
+  elseif ($phase == 'runtime') {
+    $requirements['swfobject_api'] = array(
+      'title' => $t('SWFObject API'),
+      'severity' => REQUIREMENT_OK,
+      'value' => $t('Installed correctly'),
+    );
+  }
+
+  return $requirements;
+}
