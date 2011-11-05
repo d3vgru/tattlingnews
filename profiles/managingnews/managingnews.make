@@ -1,5 +1,5 @@
 ; $Id: managingnews.make,v 1.1.2.176 2010/10/29 20:14:07 diggersf Exp $
-
+; d3vgru - 05-NOV-2011 - this file has not been updated with new versions of anything
 api = 2
 core = 6.x
 

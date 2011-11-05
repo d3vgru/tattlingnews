@@ -4,17 +4,17 @@
 /**
  * Implementation of hook_profile_details().
  */
-function tattlingnews_profile_details() {
+function managingnews_profile_details() {
   return array(
-    'name' => 'Tattling News',
-    'description' => 'A news aggregator by Development Seed -> Phase 2. H4x3d by d3vgru.'
+    'name' => 'Managing News',
+    'description' => 'A news aggregator by Development Seed with OWS News Curator, RDF and i18n support added.'
   );
 }
 
 /**
  * Implementation of hook_profile_modules().
  */
-function tattlingnews_profile_modules() {
+function managingnews_profile_modules() {
   // Drupal core
   $modules = array(
     'block',
@@ -88,13 +88,13 @@ function tattlingnews_profile_modules() {
 	'rdf',
 	'charts_graphs',
 	'charts_graphs_bluff',
-	'distro_client',
-	'feedapi',
-	'feedapi_node',
-	'feedapi_inherit',
+//	'distro_client',
+//	'feedapi',
+//	'feedapi_node',
+//	'feedapi_inherit',
 //	'feedapi_source',
-	'feedapi_dedupe',
-	'feedapi_itemfilter',
+//	'feedapi_dedupe',
+//	'feedapi_itemfilter',
 	'flag',
 //	'img_extractor',
 	'plus1',
@@ -136,10 +136,10 @@ function _managingnews_core_modules() {
     'boxes',
 
 	// tattler-specific stuff
-	'buzzmonitor',
-	'buzz_yahoo_terms',
-	'buzz_topics',
-	'tattler_trends',
+//	'buzzmonitor',
+//	'buzz_yahoo_terms',
+//	'buzz_topics',
+//	'tattler_trends',
 
 	// d3vgru
 	'mn_curator',
@@ -151,16 +151,16 @@ function _managingnews_core_modules() {
 /**
  * Implementation of hook_profile_task_list().
  */
-function tattlingnews_profile_task_list() {
+function managingnews_profile_task_list() {
   return array(
-    'mn-configure' => st('Tattling News configuration'),
+    'mn-configure' => st('Managing News configuration'),
   );
 }
 
 /**
  * Implementation of hook_profile_tasks().
  */
-function tattlingnews_profile_tasks(&$task, $url) {
+function managingnews_profile_tasks(&$task, $url) {
   // Just in case some of the future tasks adds some output
   $output = '';
 
@@ -187,15 +187,12 @@ function tattlingnews_profile_tasks(&$task, $url) {
   if ($task == 'mn-configure') {
 
     // Other variables worth setting.
-    variable_set('site_footer', 'Powered by <a href="http://www.managingnews.com">Managing News</a> and <a href="http://www.tattlerapp.com">Tattler</a>.');
+    variable_set('site_footer', 'Powered by <a href="http://www.managingnews.com">Managing News</a>.');
     variable_set('site_frontpage', 'feeds');
     variable_set('comment_channel', 0);
     variable_set('comment_feed', 0);
     variable_set('comment_book', 0);
 	
-	// *** install Tattler ***
-//	install_tattler();
-
     // Clear caches.
     drupal_flush_all_caches();
 
@@ -234,15 +231,12 @@ function _managingnews_profile_batch_finished($success, $results) {
 /**
  * Implementation of hook_form_alter().
  */
-function tattlingnews_form_alter(&$form, $form_state, $form_id) {
+function managingnews_form_alter(&$form, $form_state, $form_id) {
   if ($form_id == 'install_configure') {
-    $form['site_information']['site_name']['#default_value'] = 'Tattling News';
+    $form['site_information']['site_name']['#default_value'] = 'Managing News';
     $form['site_information']['site_mail']['#default_value'] = 'no-reply@'. $_SERVER['HTTP_HOST'];
     $form['admin_account']['account']['name']['#default_value'] = 'admin';
     $form['admin_account']['account']['mail']['#default_value'] = 'admin@'. $_SERVER['HTTP_HOST'];
-	
-	// TODO: collect API keys here
-	
   }
 }
 
@@ -253,7 +247,7 @@ function tattlingnews_form_alter(&$form, $form_state, $form_id) {
  */
 function _managingnews_system_theme_data() {
   global $profile;
-  $profile = 'tattlingnews';
+  $profile = 'managingnews';
 
   $themes = drupal_system_listing('\.info$', 'themes');
   $engines = drupal_system_listing('\.engine$', 'themes/engines');
@@ -330,27 +324,4 @@ function _managingnews_system_theme_data() {
     $theme->owner = !isset($theme->owner) ? '' : $theme->owner;
     db_query("INSERT INTO {system} (name, owner, info, type, filename, status, throttle, bootstrap) VALUES ('%s', '%s', '%s', '%s', '%s', %d, %d, %d)", $theme->name, $theme->owner, serialize($theme->info), 'theme', $theme->filename, isset($theme->status) ? $theme->status : 0, 0, 0);
   }
-}
-
-function install_tattler() {
-    include('tattler.profile.inc');
-	
-	// make a function
-	// values should come from main config form
-	// we should save values where form is processed
-	/*
-    // Save values from the API form
-    $form_values = array('values' => $_POST);
-    system_settings_form_submit(array(), $form_values);
-    */
-	
-    _install_log(t('Start Tattler installation'));
-//    install_include(tattler_profile_modules());
-	
-    drupal_set_title(t('Tattler Installation'));
-    _tattler_base_settings();
-    _buzz_set_cck_types();
-    _tattler_setup_flags();
-    _tattler_initialize_settings();
-//    _tattler_setup_blocks();
 }
