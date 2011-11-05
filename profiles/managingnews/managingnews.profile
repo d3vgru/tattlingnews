@@ -126,7 +126,7 @@ function _managingnews_core_modules() {
     'stored_views',
     'web_widgets',
     'mn_core',
-    'mn_about',
+//    'mn_about',
     'mn_search',
     'mn_world',
     'mn_channels',
@@ -208,7 +208,7 @@ function managingnews_profile_tasks(&$task, $url) {
     // Revert key components that are overridden by others on install.
     $revert = array(
       'mn_core' => array('variable'),
-      'mn_about' => array('user_permission', 'variable'),
+//      'mn_about' => array('user_permission', 'variable'),
       'mn_channels' => array('user_permission', 'variable'),
     );
     features_revert($revert);
